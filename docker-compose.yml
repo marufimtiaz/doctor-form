@@ -1,0 +1,95 @@
+# Local development stack: every service is published on a host port so you can
+# hit it directly. Frontend runs the Vite dev server with HMR; the backend runs
+# uvicorn --reload against a bind-mounted source tree.
+name: doctor-form
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+    ports:
+      # Published so GUI clients (TablePlus, DBeaver, psql) can connect directly.
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # PG18+ wants the mount one level up; data lands in a versioned
+      # subdirectory so pg_upgrade --link works across major versions.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rustfs:
+    image: rustfs/rustfs:1.0.0-rc.3
+    restart: unless-stopped
+    security_opt:
+      - "no-new-privileges:true"
+    environment:
+      RUSTFS_VOLUMES: /data/rustfs0
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
+      RUSTFS_OBS_LOGGER_LEVEL: info
+    ports:
+      - "${RUSTFS_API_PORT:-9000}:9000"   # S3 API
+      - "${RUSTFS_CONSOLE_PORT:-9001}:9001" # Web console
+    volumes:
+      - rustfs-data:/data
+      - rustfs-logs:/logs
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      DEBUG: "true"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@postgres:5432/${POSTGRES_DB:-app}
+      CORS_ORIGINS: http://localhost:${FRONTEND_PORT:-5173}
+      S3_ENDPOINT_URL: http://rustfs:9000
+      # Presigned URLs open in the browser, so they must use the published port.
+      S3_PUBLIC_ENDPOINT_URL: http://localhost:${RUSTFS_API_PORT:-9000}
+      S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      S3_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
+      S3_BUCKET: ${S3_BUCKET:-uploads}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      # Source bind-mount enables --reload; the venv at /app/.venv is untouched.
+      - ./backend/app:/app/app:ro
+    command:
+      ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    depends_on:
+      rustfs:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      target: dev
+    restart: unless-stopped
+    environment:
+      # Vite's dev proxy forwards /api to the backend container.
+      VITE_PROXY_TARGET: http://backend:8000
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/app
+      # Anonymous volume keeps the image's node_modules from being shadowed.
+      - /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:
+  rustfs-data:
+  rustfs-logs:

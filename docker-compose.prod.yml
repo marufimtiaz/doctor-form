@@ -1,0 +1,106 @@
+# Production stack for Coolify.
+#
+# Nothing binds a host port. Caddy (inside the `frontend` image) is the only
+# ingress: it serves the built SPA and reverse-proxies /api to the backend.
+# Coolify's edge proxy terminates TLS and routes the generated FQDN to port 80.
+#
+# Coolify magic env vars used here:
+#   SERVICE_FQDN_FRONTEND_80  -> allocates a domain routed to frontend:80
+#   SERVICE_PASSWORD_RUSTFS   -> generates and persists a random secret
+#   SERVICE_PASSWORD_POSTGRES -> same, for the database password
+name: doctor-form
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+    ports:
+      # Deliberately published: lets you attach a GUI client from your laptop.
+      # Coolify's proxy is HTTP-only, so a domain cannot front raw Postgres TCP.
+      # The password is the only thing guarding this port - keep it strong, and
+      # restrict source IPs at the firewall if you can.
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # PG18+ wants the mount one level up; data lands in a versioned
+      # subdirectory so pg_upgrade --link works across major versions.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rustfs:
+    image: rustfs/rustfs:1.0.0-rc.3
+    restart: unless-stopped
+    security_opt:
+      - "no-new-privileges:true"
+    environment:
+      RUSTFS_VOLUMES: /data/rustfs0
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${SERVICE_PASSWORD_RUSTFS}
+      RUSTFS_OBS_LOGGER_LEVEL: warn
+      # Coolify allocates a public domain for the S3 API so that browsers can
+      # open presigned attachment URLs directly.
+      SERVICE_FQDN_RUSTFS_9000: ""
+    expose:
+      - "9000"
+      # Console stays internal. To publish it, add a Coolify domain by setting
+      # SERVICE_FQDN_RUSTFS_9001 in this service's environment.
+      - "9001"
+    volumes:
+      - rustfs-data:/data
+      - rustfs-logs:/logs
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      DEBUG: "false"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-app}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-app}
+      # Same-origin through Caddy, so no cross-origin requests are made.
+      CORS_ORIGINS: ""
+      S3_ENDPOINT_URL: http://rustfs:9000
+      # Must be the browser-reachable RustFS origin; SigV4 signs this host.
+      S3_PUBLIC_ENDPOINT_URL: ${SERVICE_URL_RUSTFS_9000}
+      S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      S3_SECRET_KEY: ${SERVICE_PASSWORD_RUSTFS}
+      S3_BUCKET: ${S3_BUCKET:-uploads}
+    expose:
+      - "8000"
+    depends_on:
+      rustfs:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      target: prod
+      args:
+        # Empty = same-origin; Caddy handles the /api split.
+        VITE_API_BASE_URL: ""
+    restart: unless-stopped
+    environment:
+      - SERVICE_FQDN_FRONTEND_80
+      - BACKEND_UPSTREAM=backend:8000
+    expose:
+      - "80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  rustfs-data:
+  rustfs-logs:

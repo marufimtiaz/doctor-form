@@ -1,0 +1,51 @@
+{
+	admin off
+	# Coolify's edge proxy terminates TLS and forwards plain HTTP to this container.
+	auto_https off
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+:80 {
+	encode zstd gzip
+
+	# Container-level health probe; never reaches the SPA or the API.
+	respond /healthz 200
+
+	# API traffic goes to FastAPI. Same-origin, so the browser needs no CORS.
+	handle /api/* {
+		reverse_proxy {$BACKEND_UPSTREAM:backend:8000} {
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# Everything else is the built SPA.
+	handle {
+		root * /srv
+
+		# Vite fingerprints these filenames, so they can be cached forever.
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+
+		# Everything else (index.html above all) must be revalidated, or clients
+		# pin an old bundle. Scoped with `not` so it cannot override the rule above.
+		@notassets not path /assets/*
+		header @notassets Cache-Control "no-cache"
+
+		header {
+			X-Content-Type-Options nosniff
+			X-Frame-Options DENY
+			Referrer-Policy strict-origin-when-cross-origin
+			-Server
+		}
+
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
