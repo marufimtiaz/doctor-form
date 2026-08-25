@@ -14,7 +14,8 @@ Local (docker-compose.yml)          Production (docker-compose.prod.yml)
 :8000  backend (FastAPI) ─┘          frontend  │ Caddy :80  (expose)
 :5432  postgres  ◀── GUI             ├─ /api/* ─▶ backend :8000 (expose)
 :9000  rustfs (S3 API)               └─ /*     ─▶ built SPA from /srv
-:9001  rustfs (console)              rustfs :9000 (own Coolify domain)
+:9001  rustfs (console)              rustfs :9000 (S3 domain)
+                                     rustfs :9001 (console domain)
                                      postgres :5432 (published) ◀── GUI
 ```
 
@@ -86,10 +87,26 @@ Attachments are stored in RustFS and returned as **presigned URLs** (1h default)
 3. Deploy. Coolify generates, and you should not set by hand:
    - `SERVICE_FQDN_FRONTEND_80` — public domain routed to Caddy
    - `SERVICE_FQDN_RUSTFS_9000` / `SERVICE_URL_RUSTFS_9000` — public S3 domain
+   - `SERVICE_FQDN_RUSTFS_9001` / `SERVICE_URL_RUSTFS_9001` — RustFS admin console
    - `SERVICE_PASSWORD_RUSTFS` — RustFS secret key, shared with the backend
+   - `SERVICE_PASSWORD_POSTGRES` — database password, shared with the backend
 
-No service publishes a host port; each uses `expose`, and Coolify's proxy routes
-to the `frontend` container on port 80.
+Three public domains come out of this: the app (Caddy), the S3 API, and the
+RustFS console. Postgres is the one service using a published port instead —
+Coolify's proxy is HTTP-only and cannot front raw TCP.
+
+### The RustFS console
+
+Reach it at **`https://<SERVICE_FQDN_RUSTFS_9001>/rustfs/console/`** — note the
+trailing path. The domain root answers as the S3 API and returns `AccessDenied`.
+
+The whole domain is routed to port 9001 rather than a `/rustfs/console` subpath,
+because the console loads its assets from that absolute prefix; a proxy that
+strips the prefix serves the page but breaks every script on it.
+
+Log in with `RUSTFS_ACCESS_KEY` (default `rustfsadmin`) and the generated
+`SERVICE_PASSWORD_RUSTFS`. This console has full read/write access to every
+bucket, so treat that password as production credentials.
 
 ### Why RustFS needs its own domain
 

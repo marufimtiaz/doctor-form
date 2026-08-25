@@ -8,6 +8,8 @@
 #   SERVICE_FQDN_FRONTEND_80  -> allocates a domain routed to frontend:80
 #   SERVICE_PASSWORD_RUSTFS   -> generates and persists a random secret
 #   SERVICE_PASSWORD_POSTGRES -> same, for the database password
+#   SERVICE_FQDN_RUSTFS_9000  -> public S3 domain (presigned URLs)
+#   SERVICE_FQDN_RUSTFS_9001  -> public RustFS admin console domain
 name: doctor-form
 
 services:
@@ -50,10 +52,18 @@ services:
       # Coolify allocates a public domain for the S3 API so that browsers can
       # open presigned attachment URLs directly.
       SERVICE_FQDN_RUSTFS_9000: ""
+      # ...and a second one for the admin console, which is plain HTTP and so
+      # can sit behind the Coolify proxy. The whole domain is routed to 9001
+      # rather than a subpath, because the console serves its assets from an
+      # absolute /rustfs/console/ prefix that a path-stripping proxy breaks.
+      # Reach the UI at https://<that-domain>/rustfs/console/ - the domain
+      # root answers as the S3 API and returns AccessDenied.
+      SERVICE_FQDN_RUSTFS_9001: ""
+      # The console is served from its own origin but calls the S3 API on the
+      # 9000 domain, so that origin has to be allowed explicitly.
+      RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS: ${SERVICE_URL_RUSTFS_9001:-*}
     expose:
       - "9000"
-      # Console stays internal. To publish it, add a Coolify domain by setting
-      # SERVICE_FQDN_RUSTFS_9001 in this service's environment.
       - "9001"
     volumes:
       - rustfs-data:/data
