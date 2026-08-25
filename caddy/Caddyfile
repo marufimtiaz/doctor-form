@@ -11,10 +11,25 @@
 	encode zstd gzip
 
 	# Container-level health probe; never reaches the SPA or the API.
-	respond /healthz 200
+	handle /healthz {
+		respond "OK" 200
+	}
 
 	# API traffic goes to FastAPI. Same-origin, so the browser needs no CORS.
 	handle /api/* {
+		reverse_proxy {$BACKEND_UPSTREAM:backend:8000} {
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# OpenAPI documentation routes
+	handle /docs* {
+		reverse_proxy {$BACKEND_UPSTREAM:backend:8000} {
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	handle /openapi.json {
 		reverse_proxy {$BACKEND_UPSTREAM:backend:8000} {
 			header_up X-Real-IP {remote_host}
 		}

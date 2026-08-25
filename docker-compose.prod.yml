@@ -3,13 +3,6 @@
 # Nothing binds a host port. Caddy (inside the `frontend` image) is the only
 # ingress: it serves the built SPA and reverse-proxies /api to the backend.
 # Coolify's edge proxy terminates TLS and routes the generated FQDN to port 80.
-#
-# Coolify magic env vars used here:
-#   SERVICE_FQDN_FRONTEND_80  -> allocates a domain routed to frontend:80
-#   SERVICE_PASSWORD_RUSTFS   -> generates and persists a random secret
-#   SERVICE_PASSWORD_POSTGRES -> same, for the database password
-#   SERVICE_FQDN_RUSTFS_9000  -> public S3 domain (presigned URLs)
-#   SERVICE_FQDN_RUSTFS_9001  -> public RustFS admin console domain
 name: doctor-form
 
 services:
@@ -49,18 +42,7 @@ services:
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
       RUSTFS_SECRET_KEY: ${SERVICE_PASSWORD_RUSTFS}
       RUSTFS_OBS_LOGGER_LEVEL: warn
-      # Coolify allocates a public domain for the S3 API so that browsers can
-      # open presigned attachment URLs directly.
-      SERVICE_FQDN_RUSTFS_9000: ""
-      # ...and a second one for the admin console, which is plain HTTP and so
-      # can sit behind the Coolify proxy. The whole domain is routed to 9001
-      # rather than a subpath, because the console serves its assets from an
-      # absolute /rustfs/console/ prefix that a path-stripping proxy breaks.
-      # Reach the UI at https://<that-domain>/rustfs/console/ - the domain
-      # root answers as the S3 API and returns AccessDenied.
-      SERVICE_FQDN_RUSTFS_9001: ""
-      # The console is served from its own origin but calls the S3 API on the
-      # 9000 domain, so that origin has to be allowed explicitly.
+
       RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS: ${SERVICE_URL_RUSTFS_9001:-*}
     expose:
       - "9000"
@@ -80,17 +62,15 @@ services:
       CORS_ORIGINS: ""
       S3_ENDPOINT_URL: http://rustfs:9000
       # Must be the browser-reachable RustFS origin; SigV4 signs this host.
-      S3_PUBLIC_ENDPOINT_URL: ${SERVICE_URL_RUSTFS_9000}
+      S3_PUBLIC_ENDPOINT_URL: ${SERVICE_URL_RUSTFS:-${SERVICE_URL_RUSTFS_9000}}
       S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
       S3_SECRET_KEY: ${SERVICE_PASSWORD_RUSTFS}
       S3_BUCKET: ${S3_BUCKET:-uploads}
     expose:
       - "8000"
     depends_on:
-      rustfs:
-        condition: service_started
-      postgres:
-        condition: service_healthy
+      - postgres
+      - rustfs
 
   frontend:
     build:
@@ -102,13 +82,11 @@ services:
         VITE_API_BASE_URL: ""
     restart: unless-stopped
     environment:
-      SERVICE_FQDN_FRONTEND_80: ""
       BACKEND_UPSTREAM: backend:8000
     expose:
       - "80"
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
 
 volumes:
   postgres-data:
