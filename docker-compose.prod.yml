@@ -25,7 +25,7 @@ services:
       # Coolify's proxy is HTTP-only, so a domain cannot front raw Postgres TCP.
       # The password is the only thing guarding this port - keep it strong, and
       # restrict source IPs at the firewall if you can.
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       # PG18+ wants the mount one level up; data lands in a versioned
       # subdirectory so pg_upgrade --link works across major versions.
