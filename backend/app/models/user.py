@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, Column, DateTime
+from sqlalchemy import CheckConstraint, Column, DateTime, Integer
 from sqlmodel import Field, SQLModel
 
 
@@ -24,6 +24,21 @@ class User(SQLModel, table=True):
     company: str = Field(index=True, max_length=200)
     role: str = Field(default="agent", max_length=16)
     is_active: bool = Field(default=True)
+    # NULL means the account cannot log in yet - an admin must set a password.
+    password_hash: str | None = Field(default=None, max_length=255)
+    password_set_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    # Carried in every token as "ver". Bumping it invalidates tokens issued
+    # earlier, which is how a password change logs other devices out.
+    #
+    # server_default matters: this column is added to a table that already has
+    # rows, and ADD COLUMN ... NOT NULL without a default fails on Postgres.
+    token_version: int = Field(
+        default=1,
+        sa_column=Column(Integer, nullable=False, server_default="1"),
+    )
     created_at: datetime = Field(
         default_factory=_utcnow,
         sa_column=Column(DateTime(timezone=True), nullable=False),
