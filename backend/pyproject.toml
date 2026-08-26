@@ -12,6 +12,8 @@ dependencies = [
     "boto3>=1.43.79",
     "python-multipart>=0.0.32",
     "email-validator>=2.3.0",
+    "phonenumbers>=9.0.37",
+    "alembic>=1.19.1",
 ]
 
 [dependency-groups]
@@ -22,14 +24,22 @@ dev = [
     "ruff>=0.16.4",
     "aiosqlite>=0.22.1",
     "asgi-lifespan>=2.1.0",
+    "moto[server]>=5.2.3",
 ]
 
 [tool.ruff]
 line-length = 100
 target-version = "py314"
+# Alembic writes these; they are generated artifacts, not hand-authored code.
+extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+# The local alembic/ directory otherwise makes ruff read the installed
+# `alembic` package as first-party and reorder imports wrongly.
+known-third-party = ["alembic"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

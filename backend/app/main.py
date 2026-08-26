@@ -4,9 +4,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health, submissions
+from app.api import admin, health, surveys, users
 from app.core.config import get_settings
-from app.db.session import init_db
+from app.db.session import init_db, seed_first_admin
 from app.services.storage import ensure_bucket
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -18,6 +18,7 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await seed_first_admin()
     try:
         if settings.s3_bootstrap:
             ensure_bucket()
@@ -45,4 +46,6 @@ app.add_middleware(
 
 # Everything is mounted under /api so one reverse proxy rule covers the backend.
 app.include_router(health.router, prefix="/api")
-app.include_router(submissions.router, prefix="/api")
+app.include_router(users.router, prefix="/api")
+app.include_router(surveys.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")

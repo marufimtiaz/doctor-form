@@ -66,6 +66,9 @@ services:
       S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
       S3_SECRET_KEY: ${SERVICE_PASSWORD_RUSTFS}
       S3_BUCKET: ${S3_BUCKET:-uploads}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Dhaka}
+      ADMIN_NAME: ${ADMIN_NAME:-Admin}
+      ADMIN_PHONE: ${ADMIN_PHONE:-+8801700000000}
     expose:
       - "8000"
     depends_on:

@@ -18,8 +18,3 @@ async def test_healthz(client: httpx.AsyncClient):
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
 
-
-async def test_submissions_empty(client: httpx.AsyncClient):
-    resp = await client.get("/api/submissions")
-    assert resp.status_code == 200
-    assert isinstance(resp.json(), list)
