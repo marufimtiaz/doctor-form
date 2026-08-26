@@ -64,3 +64,31 @@ async def test_demo_agents_are_not_re_added_once_agents_exist(demo_on, make_user
     names = [u.name for u in await _users()]
     assert "Real Person" in names
     assert len(names) == 2  # the seeded admin and the real agent, nothing else
+
+
+async def test_the_seeded_admin_can_log_in(client):
+    """Without this the system is unusable on first boot: no login, and no way
+    to create a user who could."""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    resp = await client.post(
+        "/api/auth/login",
+        json={"phone": settings.admin_phone, "password": settings.admin_password},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["user"]["role"] == "admin"
+
+
+async def test_seeded_demo_agents_can_log_in(client, demo_on):
+    from app.core.config import get_settings
+
+    await seed_demo_agents()
+    settings = get_settings()
+
+    resp = await client.post(
+        "/api/auth/login",
+        json={"phone": "01711000001", "password": settings.demo_password},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["user"]["role"] == "agent"

@@ -1,5 +1,6 @@
 import logging
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -101,6 +102,7 @@ async def seed_first_admin() -> None:
     from sqlmodel import select
 
     from app.core.phone import normalize_phone
+    from app.core.security import hash_password
     from app.models.user import User
 
     async with SessionLocal() as session:
@@ -113,6 +115,8 @@ async def seed_first_admin() -> None:
                 phone=normalize_phone(settings.admin_phone),
                 company=settings.app_name,
                 role="admin",
+                password_hash=hash_password(settings.admin_password),
+                password_set_at=datetime.now(UTC),
             )
         )
         await session.commit()
@@ -140,12 +144,16 @@ async def seed_demo_agents() -> None:
     from sqlmodel import select
 
     from app.core.phone import normalize_phone
+    from app.core.security import hash_password
     from app.models.user import User
 
     async with SessionLocal() as session:
         existing = await session.exec(select(User).where(User.role == "agent").limit(1))
         if existing.first() is not None:
             return
+        # Hashed once and reused: argon2 is deliberately slow, and three hashes
+        # of the same string would add close to a second to every boot.
+        demo_hash = hash_password(settings.demo_password)
         for name, phone, company in _DEMO_AGENTS:
             session.add(
                 User(
@@ -153,6 +161,8 @@ async def seed_demo_agents() -> None:
                     phone=normalize_phone(phone),
                     company=company,
                     role="agent",
+                    password_hash=demo_hash,
+                    password_set_at=datetime.now(UTC),
                 )
             )
         await session.commit()
