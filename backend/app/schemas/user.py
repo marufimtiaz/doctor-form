@@ -1,8 +1,19 @@
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.phone import normalize_phone
+
+# Length is what makes a password strong. Composition rules mostly push people
+# toward predictable substitutions. The upper bound exists because argon2 will
+# happily burn CPU on a megabyte of input.
+PASSWORD_MIN = 8
+PASSWORD_MAX = 128
+
+
+def password_field() -> Any:
+    return Field(min_length=PASSWORD_MIN, max_length=PASSWORD_MAX)
 
 
 class UserCreate(BaseModel):
