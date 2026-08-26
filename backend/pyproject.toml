@@ -12,6 +12,7 @@ dependencies = [
     "boto3>=1.43.79",
     "python-multipart>=0.0.32",
     "email-validator>=2.3.0",
+    "phonenumbers>=9.0.37",
 ]
 
 [dependency-groups]

@@ -9,6 +9,14 @@ class Settings(BaseSettings):
     app_name: str = "doctor-form"
     debug: bool = False
 
+    # Counts are reported per local day; see app/core/timeutil.py.
+    app_timezone: str = "Asia/Dhaka"
+
+    # Identity is chosen from the users list, so the list cannot start empty.
+    # These seed the first admin on boot when no users exist.
+    admin_name: str = "Admin"
+    admin_phone: str = "+8801700000000"
+
     # Comma-separated list of allowed origins for CORS.
     cors_origins: str = "http://localhost:5173"
 
