@@ -32,6 +32,7 @@ from asgi_lifespan import LifespanManager  # noqa: E402
 from sqlmodel import SQLModel  # noqa: E402
 
 from app.core.config import get_settings  # noqa: E402
+from app.core.security import create_access_token  # noqa: E402
 from app.db.session import SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.user import User  # noqa: E402
@@ -101,5 +102,10 @@ async def make_user():
 
 
 def auth(user: User) -> dict[str, str]:
-    """Headers that identify `user`. Where a bearer token will go later."""
-    return {"X-User-Id": str(user.id)}
+    """Headers that authenticate `user`.
+
+    The single place tests build credentials, which is why swapping the whole
+    identity mechanism leaves the other test modules untouched.
+    """
+    token = create_access_token(user.id, user.token_version)
+    return {"Authorization": f"Bearer {token}"}

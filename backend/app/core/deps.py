@@ -3,33 +3,43 @@ from uuid import UUID
 
 from fastapi import Depends, Header, HTTPException, status
 
+from app.core.security import decode_access_token
 from app.db.session import SessionDep
 from app.models.user import User
 
 
 async def get_current_user(
     session: SessionDep,
-    x_user_id: Annotated[str | None, Header()] = None,
+    authorization: Annotated[str | None, Header()] = None,
 ) -> User:
-    """Resolve the caller from the X-User-Id header.
+    """Resolve the caller from a signed Bearer token.
 
-    This is NOT authentication - anyone can send any id. It is the seam where a
-    verified token will be read instead, so that swapping in real login touches
-    this function and nothing else.
+    Every rejection is a 401 with the same generic message: distinguishing
+    "no such user" from "wrong version" would leak account state.
 
-    The header is typed `str` rather than `UUID` on purpose: FastAPI would turn
-    a malformed UUID into a 422, and a bad credential should read as 401.
+    Revocation lives here rather than in a sessions table. The user row has to
+    be loaded anyway for role and is_active, so both checks are free:
+    deactivating a user or bumping their token_version invalidates tokens
+    already issued, without any server-side session storage.
     """
-    if x_user_id is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "X-User-Id header required")
+    if not authorization:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "authentication required")
+
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "authentication required")
+
     try:
-        user_id = UUID(x_user_id)
-    except ValueError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "malformed X-User-Id") from None
+        payload = decode_access_token(token.strip())
+        user_id = UUID(payload["sub"])
+    except (ValueError, KeyError):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid or expired token") from None
 
     user = await session.get(User, user_id)
     if user is None or not user.is_active:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "unknown or inactive user")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid or expired token")
+    if user.token_version != payload.get("ver"):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid or expired token")
     return user
 
 
