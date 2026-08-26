@@ -21,6 +21,7 @@ class UserCreate(BaseModel):
     phone: str = Field(min_length=1, max_length=32)
     company: str = Field(min_length=1, max_length=200)
     role: str = "agent"
+    password: str = password_field()
 
     @field_validator("phone")
     @classmethod
