@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health, surveys, users
+from app.api import admin, health, surveys, users
 from app.core.config import get_settings
 from app.db.session import init_db, seed_first_admin
 from app.services.storage import ensure_bucket
@@ -48,3 +48,4 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(surveys.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
