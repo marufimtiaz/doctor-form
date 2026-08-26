@@ -8,6 +8,10 @@ from moto.server import ThreadedMotoServer
 # Must be set before app.core.config is imported, since Settings is cached.
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./test.db")
 os.environ.setdefault("S3_BOOTSTRAP", "false")
+# The startup guard refuses insecure defaults whenever debug is false, and the
+# suite does not set DEBUG.
+os.environ.setdefault("JWT_SECRET", "test-secret-long-enough-for-hmac-sha256-abcdef")
+os.environ.setdefault("ADMIN_PASSWORD", "test-admin-password")
 
 # A real S3 server on localhost, not moto's in-process patching: moto only
 # intercepts calls aimed at AWS's own endpoints, and this app always points
