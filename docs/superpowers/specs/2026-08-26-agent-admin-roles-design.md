@@ -8,10 +8,10 @@
 The repository ships a scaffold: one page showing a placeholder "patient" form
 and, to everybody, every submission ever made. The real system is different.
 
-Field **agents** visit hospitals and record where a doctor sits, when, and at
-what throughput. An agent files many surveys a day and wants to see their own
-running totals. An **admin** oversees all agents and needs every survey plus
-overall counts.
+Field **agents** visit hospitals and record where a doctor sits, when, at what
+throughput, and how to reach the chamber. An agent files many surveys a day and
+wants to see their own running totals. An **admin** oversees all agents and
+needs every survey plus overall counts.
 
 There is no login yet, and none is being built here. What is being built is the
 role structure, the identity boundary, and the per-user scoping that real login
@@ -38,12 +38,25 @@ attach to, so the historical data would be orphaned at migration time.
 instead of a header. No route, model, or frontend page changes. The `user_id`
 foreign keys already point at the right rows.
 
+### Migrations exist from the first commit
+
+`init_db()` currently calls `SQLModel.metadata.create_all`, which can only
+create missing tables — it can never alter one. Introducing Alembic now, while
+the database is empty, makes the baseline revision trivially correct. Deferring
+it means the first schema change after go-live is hand-written SQL against
+production data, plus a stamped baseline that has to be verified by hand.
+
+Alembic runs against Postgres on boot (`alembic upgrade head`). The test suite
+keeps using `create_all` against SQLite, preserving the property that `pytest`
+works on a bare checkout with no compose stack running.
+
+The initial revision simply does not contain the scaffold's `submissions`
+table. Existing development databases are dropped once; the data is disposable.
+
 ### The placeholder entity is replaced, not extended
 
 `submissions` (with `patient_name`, `email`, `notes`) was demo scaffolding and
-is deleted. `init_db()` uses `SQLModel.metadata.create_all` with no migration
-tool, so renaming costs a manual `DROP TABLE submissions` and nothing else.
-Keeping the old table would leave three columns whose names actively lie about
+is deleted. Keeping it would leave three columns whose names actively lie about
 the domain.
 
 ### Doctor identity comes from OCR, not from the agent
@@ -59,8 +72,8 @@ A survey without one can never be attributed.
 `doctor_specializations` is text, not a child table, even though it is the
 multi-valued field. Its real shape is unknown until the OCR pipeline emits
 values off actual nameplates; structuring it now means migrating twice.
-Postgres `ARRAY`/`JSONB` are additionally unavailable because the test suite
-runs on SQLite.
+Promoting it to a child table later is a data-preserving migration — columns
+copy into rows — so starting flat forfeits nothing.
 
 ### Location: coordinates or place, at least one
 
@@ -69,31 +82,64 @@ whose corridor has no GPS lock. Requiring city/district would discard good GPS
 data. So either pair satisfies the requirement, and each pair is
 all-or-nothing.
 
-### Deletion is admin-only
+### Deletion is soft
 
-Field data a surveyor can quietly remove is field data that cannot be audited.
+Field data a surveyor can quietly remove is field data that cannot be audited,
+so deletion is admin-only. It is also **soft**: `DELETE /api/admin/surveys/{id}`
+sets `deleted_at` and leaves the nameplate object in storage.
+
+`storage.delete_object` therefore loses its only caller when
+`api/submissions.py` is deleted. Keep the helper — a retention or purge job is
+the natural place for it — but it is dead code until then, and should be
+labelled as such rather than left looking load-bearing.
+
+This is the one decision here that cannot be revisited later. Every other
+column on this page can be added by a future migration; rows destroyed by a
+hard delete are gone. Retaining them costs a nullable timestamp and a filter.
+
+### Enumerations are VARCHAR + CHECK, never native Postgres ENUM
+
+`role` and `ocr_status` are `VARCHAR` with a `CHECK` constraint. Native
+Postgres enum types are awkward to alter and do not exist in SQLite, which
+would make the test suite diverge from production. Adding a `supervisor` role
+later should be a one-line constraint change.
+
+### Phone numbers are normalized to E.164 on write
+
+Every phone — the user's and the chamber's — is stored as `+8801712345678`.
+A uniqueness constraint spanning `01712345678` and `+8801712345678` is not a
+constraint at all, and if phone later becomes the OTP login identity,
+deduplicating inconsistent formats means manual work on live accounts.
 
 ## Data model
 
 ```
-users                          chamber_surveys                        availability_slots
-─────                          ───────────────                        ──────────────────
-id         UUID pk             id                     UUID pk         id          UUID pk
-name       str(200) idx        user_id                FK users idx    survey_id   FK surveys idx
-phone      str(32) uniq        hospital_name          str(200) idx                ON DELETE CASCADE
-company    str(200) idx        city                   str(100) NULL   day_of_week int 0..6
-role       'agent'|'admin'     district               str(100) NULL   start_time  TIME
-is_active  bool = true         latitude               float NULL      end_time    TIME
-created_at timestamptz         longitude              float NULL
-                               nameplate_key          str NOT NULL
-                               daily_patients         int NOT NULL
-                               avg_duration_min       int NOT NULL
-                               consultation_fee_bdt   int NOT NULL
-                               ocr_status  'pending'|'done'|'failed'  NOT NULL
-                               doctor_name            str NULL
-                               doctor_degrees         text NULL
-                               doctor_specializations text NULL
-                               created_at             timestamptz idx
+users                            chamber_surveys
+─────                            ───────────────
+id         UUID pk               id                     UUID pk
+name       str(200) idx          user_id                FK users idx
+phone      str(32) uniq E.164    hospital_name          str(200) idx
+company    str(200) idx          city                   str(100) NULL
+role       VARCHAR(16) CHECK     district               str(100) NULL
+             ('agent','admin')   latitude               float NULL
+is_active  bool = true           longitude              float NULL
+created_at timestamptz           nameplate_key          str NOT NULL
+updated_at timestamptz           daily_patients         int NOT NULL
+                                 avg_duration_min       int NOT NULL
+availability_slots               consultation_fee_bdt   int NOT NULL
+──────────────────               ocr_status             VARCHAR(16) CHECK
+id          UUID pk                                       ('pending','done','failed')
+survey_id   FK surveys idx       doctor_name            str NULL
+            ON DELETE CASCADE    doctor_degrees         text NULL
+day_of_week int 0..6             doctor_specializations text NULL
+start_time  TIME                 created_at             timestamptz idx
+end_time    TIME                 updated_at             timestamptz
+                                 deleted_at             timestamptz NULL idx
+survey_phones
+─────────────
+id          UUID pk
+survey_id   FK surveys idx ON DELETE CASCADE
+phone       str(32) idx, E.164
 ```
 
 **Table constraint on `chamber_surveys`:**
@@ -109,7 +155,8 @@ CHECK (
 
 | Field | Rule |
 |---|---|
-| `phone` | unique; the natural key now that email is gone, and where an OTP would go |
+| `users.phone` | unique, E.164; the natural key now that email is gone, and where an OTP would go |
+| `survey_phones.phone` | E.164; **at least one per survey**; not unique — a chamber may share a line |
 | `latitude` / `longitude` | −90..90 / −180..180; both or neither |
 | `city` / `district` | non-empty; both or neither |
 | `daily_patients` | > 0 |
@@ -117,10 +164,15 @@ CHECK (
 | `consultation_fee_bdt` | >= 0, whole taka as an integer — never a float for money |
 | `day_of_week` | 0=Monday .. 6=Sunday, matching `datetime.weekday()`; the UI renders Sat→Fri |
 | `end_time` | strictly greater than `start_time` |
-| slots per survey | at least one; not expressible as a DB constraint, enforced in the schema |
+| slots per survey | at least one |
+| `updated_at` | set on every write, including the future OCR pass — without it there is no way to tell which rows the pipeline has touched |
 
 `day_of_week` stores the calendar convention, not the display order. Storing
 display order in the database is the mistake this note exists to prevent.
+
+"At least one" for slots and phones is not expressible as a database
+constraint; both are enforced in the create schema (`min_length=1`) and
+covered by tests.
 
 ### "Today" is an Asia/Dhaka day
 
@@ -151,13 +203,13 @@ async def require_admin(user: Annotated[User, Depends(get_current_user)]) -> Use
 | GET | `/api/users` | public | `id`, `name`, `company`, `role` only — never `phone`. Feeds the identity picker. |
 | POST | `/api/users` | `require_admin` | create a user: `name`, `phone`, `company`, `role`; `role` may be `agent` or `admin`, so an admin can appoint another admin |
 | PATCH | `/api/users/{id}` | `require_admin` | toggle `is_active`; the only writer of that column |
-| GET | `/api/surveys` | `get_current_user` | the caller's own surveys only |
+| GET | `/api/surveys` | `get_current_user` | the caller's own surveys, `deleted_at IS NULL` |
 | POST | `/api/surveys` | `get_current_user` | `user_id` from the header, never the body |
-| GET | `/api/surveys/{id}` | `get_current_user` | **404** when it is not the caller's — do not confirm existence |
-| GET | `/api/surveys/stats` | `get_current_user` | `{total, today}` for the caller |
-| GET | `/api/admin/surveys` | `require_admin` | all surveys + agent name; filter by agent, district, and date range interpreted in `app_timezone`, not UTC; `limit`/`offset` as today |
-| GET | `/api/admin/stats` | `require_admin` | `{total, today, agent_count, per_agent: [...]}` |
-| DELETE | `/api/admin/surveys/{id}` | `require_admin` | delete row and its S3 object |
+| GET | `/api/surveys/{id}` | `get_current_user` | **404** when it is not the caller's, or is soft-deleted |
+| GET | `/api/surveys/stats` | `get_current_user` | `{total, today}` for the caller, excluding deleted |
+| GET | `/api/admin/surveys` | `require_admin` | all surveys + agent name; filter by agent, district, and date range interpreted in `app_timezone`, not UTC; `limit`/`offset` as today; `include_deleted` defaults false |
+| GET | `/api/admin/stats` | `require_admin` | `{total, today, agent_count, per_agent: [...]}`, excluding deleted |
+| DELETE | `/api/admin/surveys/{id}` | `require_admin` | **soft** — sets `deleted_at`, keeps the row and the S3 object |
 
 **`/api/surveys/stats` must be declared before `/api/surveys/{id}`.** FastAPI
 matches routes in declaration order, so the reverse order parses `stats` as a
@@ -169,9 +221,9 @@ their own counts there, and those rows are included in the admin totals like any
 other. Only the `/api/admin/*` routes are role-gated.
 
 `POST /api/surveys` is `multipart/form-data`: scalar fields, the nameplate file,
-and `slots` as a JSON-encoded string. Multipart cannot nest, and the image must
-ride in the same request. The server parses that string and validates it against
-a `SlotIn` model.
+and `slots` and `phones` as JSON-encoded strings. Multipart cannot nest, and the
+image must ride in the same request. The server parses those strings and
+validates them against `SlotIn` and `PhoneIn` models.
 
 Presigned nameplate URLs are generated on read, as `storage.presigned_get_url`
 already does for attachments.
@@ -188,6 +240,7 @@ src/
     AdminPage.tsx       stat tiles + per-agent table + all surveys w/ filters + add agent
   components/
     SlotEditor.tsx      repeater → [{ day_of_week, start_time, end_time }], min 1
+    PhoneEditor.tsx     repeater → ["+8801…"], min 1
     LocationInput.tsx   geolocation on mount into editable lat/lng, plus city/district;
                         validates "either pair" before enabling submit
     NameplateInput.tsx  required image picker, preview, client-side 10MB check
@@ -215,6 +268,7 @@ when it has not, alongside the nameplate thumbnail. Location renders as
 | nameplate > 10MB | 413 | pre-checked before upload |
 | no location pair, or a half pair | 422 | inline location error |
 | `end_time <= start_time`, day outside 0..6, zero slots | 422 | inline slot error |
+| zero phones, or an unparseable phone | 422 | inline phone error |
 
 ## Testing
 
@@ -241,30 +295,40 @@ means that when CI is added, the job is `pytest` with no services block.
   rejected
 - **slots** — round-trip persistence; `end <= start` rejected; day 7 rejected;
   empty slot list rejected
+- **phones** — round-trip persistence; empty list rejected; `01712345678`
+  normalizes to `+8801712345678`; a user created with either format collides on
+  the uniqueness constraint
 - **nameplate** — missing file rejected; uploaded object lands in the bucket
   under `surveys/<uuid>.<ext>` with its content type
+- **soft delete** — a deleted survey vanishes from agent list, agent detail,
+  both stats endpoints, and the default admin list, but appears under
+  `include_deleted=true`, and its S3 object still resolves
 - **stats timezone** — a survey created `2026-08-26T19:00Z` is `01:00` Dhaka on
   the 27th and counts toward the 27th, not the 26th
 - **admin stats** — `per_agent` counts sum to `total`
 
 ## Files
 
-**New:** `app/core/deps.py`; `app/models/{user,survey,slot}.py`;
+**New:** `backend/alembic/` (`env.py`, `versions/0001_initial.py`),
+`backend/alembic.ini`; `app/core/deps.py`; `app/models/{user,survey,slot,phone}.py`;
 `app/schemas/{user,survey}.py`; `app/api/{users,surveys,admin}.py`;
 `frontend/src/auth.tsx`; `frontend/src/routes/{AgentPage,AdminPage}.tsx`;
-`frontend/src/components/{SlotEditor,LocationInput,NameplateInput}.tsx`
+`frontend/src/components/{SlotEditor,PhoneEditor,LocationInput,NameplateInput}.tsx`
 
 **Deleted:** `app/models/submission.py`; `app/schemas/submission.py`;
 `app/api/submissions.py`; the `submissions` table
 
 **Edited:** `app/main.py` (routers); `app/core/config.py` (`app_timezone`,
-`admin_name`, `admin_phone`); `app/db/session.py` (seed first admin);
-`backend/pyproject.toml` (`moto` dev dependency); `frontend/package.json`
-(`react-router-dom`); `frontend/src/{App,api}.tsx|ts`; `README.md`
+`admin_name`, `admin_phone`); `app/db/session.py` (Alembic on Postgres,
+`create_all` on SQLite, seed first admin); `backend/pyproject.toml` (`alembic`,
+`phonenumbers`; `moto` as a dev dependency); `frontend/package.json`
+(`react-router-dom`); `frontend/src/{App,api}.tsx|ts`; `README.md`;
+`docker-compose*.yml` if migrations run as a startup step
 
 ## Explicitly out of scope
 
 - Authentication of any kind. This system has roles, not security.
 - The OCR pipeline. Only its output columns and status field exist.
 - Editing a survey after submission.
+- Restoring a soft-deleted survey through the UI.
 - Pagination beyond the existing limit/offset.
