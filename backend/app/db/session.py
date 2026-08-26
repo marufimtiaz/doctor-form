@@ -88,3 +88,29 @@ async def get_session() -> AsyncGenerator[AsyncSession]:
 
 # Shared alias so routes declare `session: SessionDep` instead of repeating Depends().
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+
+async def seed_first_admin() -> None:
+    """Create one admin when the table is empty.
+
+    Identity is picked from the users list, so an empty list is an unusable
+    system - nobody could sign in to create the first account.
+    """
+    from sqlmodel import select
+
+    from app.core.phone import normalize_phone
+    from app.models.user import User
+
+    async with SessionLocal() as session:
+        existing = await session.exec(select(User).limit(1))
+        if existing.first() is not None:
+            return
+        session.add(
+            User(
+                name=settings.admin_name,
+                phone=normalize_phone(settings.admin_phone),
+                company=settings.app_name,
+                role="admin",
+            )
+        )
+        await session.commit()
