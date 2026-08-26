@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import admin, health, surveys, users
 from app.core.config import get_settings
-from app.db.session import init_db, seed_first_admin
+from app.db.session import init_db, seed_demo_agents, seed_first_admin
 from app.services.storage import ensure_bucket
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -19,6 +19,7 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     await init_db()
     await seed_first_admin()
+    await seed_demo_agents()
     try:
         if settings.s3_bootstrap:
             ensure_bucket()

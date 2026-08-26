@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     admin_name: str = "Admin"
     admin_phone: str = "+8801700000000"
 
+    # Seeds a handful of demo agents on a fresh database so a torn-down stack
+    # comes back usable. Never enable in production: these are real, usable
+    # identities in a system that does not check passwords.
+    seed_demo_data: bool = False
+
     # Comma-separated list of allowed origins for CORS.
     cors_origins: str = "http://localhost:5173"
 

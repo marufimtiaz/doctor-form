@@ -40,6 +40,13 @@ The first admin is seeded on boot from `ADMIN_NAME` / `ADMIN_PHONE` when the
 users table is empty, because identity is picked from a list that cannot start
 empty. That admin then creates the agents.
 
+For local work, `SEED_DEMO_DATA=true` (the default in `docker-compose.yml`)
+also seeds three demo agents, so `docker compose down -v` does not leave you
+with an admin and nothing else. It is skipped the moment any agent exists, and
+`docker-compose.prod.yml` pins it to `false` — these are usable identities in a
+system that does not check passwords, so it must not be switchable from a
+production environment tab.
+
 A survey records a doctor's chamber: hospital, location, availability slots,
 chamber phone numbers, throughput, consultation fee, and a **required nameplate
 photograph**. The doctor's name, degrees and specializations are left NULL for a
@@ -205,6 +212,7 @@ Backend settings (env vars, see `backend/app/core/config.py`):
 | `APP_TIMEZONE`           | `Asia/Dhaka`                     | Day boundary for all daily counts |
 | `ADMIN_NAME`             | `Admin`                          | Seeded first admin's name        |
 | `ADMIN_PHONE`            | `+8801700000000`                 | Seeded first admin's phone (E.164) |
+| `SEED_DEMO_DATA`         | `false`                          | Seed 3 demo agents on a fresh DB; **dev only** |
 
 ### Connecting a GUI
 

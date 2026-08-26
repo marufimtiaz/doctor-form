@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Annotated
@@ -9,6 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import get_settings
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 _is_sqlite = settings.database_url.startswith("sqlite")
@@ -114,3 +116,44 @@ async def seed_first_admin() -> None:
             )
         )
         await session.commit()
+
+
+# Name, phone, company. Spread across operator prefixes so they look like real
+# contacts rather than a sequence.
+_DEMO_AGENTS = [
+    ("Karim Uddin", "01711000001", "FieldCo"),
+    ("Nusrat Jahan", "01811000002", "FieldCo"),
+    ("Rafiq Hasan", "01911000003", "MediSurvey BD"),
+]
+
+
+async def seed_demo_agents() -> None:
+    """Seed demo agents on a fresh database, when explicitly enabled.
+
+    Skipped entirely once any agent exists, so it never touches a database
+    somebody is really using - including one where the demo agents were
+    deliberately removed and then a real agent added.
+    """
+    if not settings.seed_demo_data:
+        return
+
+    from sqlmodel import select
+
+    from app.core.phone import normalize_phone
+    from app.models.user import User
+
+    async with SessionLocal() as session:
+        existing = await session.exec(select(User).where(User.role == "agent").limit(1))
+        if existing.first() is not None:
+            return
+        for name, phone, company in _DEMO_AGENTS:
+            session.add(
+                User(
+                    name=name,
+                    phone=normalize_phone(phone),
+                    company=company,
+                    role="agent",
+                )
+            )
+        await session.commit()
+        logger.info("seeded %d demo agents (SEED_DEMO_DATA is on)", len(_DEMO_AGENTS))

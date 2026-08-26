@@ -69,6 +69,9 @@ services:
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Dhaka}
       ADMIN_NAME: ${ADMIN_NAME:-Admin}
       ADMIN_PHONE: ${ADMIN_PHONE:-+8801700000000}
+      # Hard-coded off: demo agents are real logins in a system with no
+      # passwords, so this must not be switchable from the environment.
+      SEED_DEMO_DATA: "false"
     expose:
       - "8000"
     depends_on:
