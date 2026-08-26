@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends
@@ -35,17 +36,49 @@ SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=
 
 
 async def init_db() -> None:
-    """Create tables on first boot."""
+    """Bring the schema up to date.
+
+    Postgres is owned by Alembic. SQLite is only ever the test database, where
+    create_all is faster and keeps pytest runnable with no stack up.
+    """
     # Imported for the side effect of registering models on SQLModel.metadata.
     from app import models  # noqa: F401
 
-    async with engine.begin() as conn:
-        if _is_sqlite:
-            # Only meaningful for the file-based test database.
+    if _is_sqlite:
+        async with engine.begin() as conn:
             await conn.exec_driver_sql("PRAGMA journal_mode=WAL")
             await conn.exec_driver_sql("PRAGMA foreign_keys=ON")
             await conn.exec_driver_sql("PRAGMA busy_timeout=5000")
-        await conn.run_sync(SQLModel.metadata.create_all)
+            await conn.run_sync(SQLModel.metadata.create_all)
+        return
+
+    # Alembic's API is synchronous, so it runs through run_sync on this
+    # connection rather than in a thread of its own.
+    async with engine.begin() as conn:
+        await conn.run_sync(_upgrade_to_head)
+
+
+def _alembic_config():
+    from alembic.config import Config
+
+    backend_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(backend_root / "alembic.ini"))
+    cfg.set_main_option("script_location", str(backend_root / "alembic"))
+    cfg.set_main_option("sqlalchemy.url", settings.database_url)
+    return cfg
+
+
+def _upgrade_to_head(connection) -> None:
+    """Upgrade using a connection the caller already owns.
+
+    Alembic must not open its own async engine here: that would mean a second
+    event loop inside a worker thread, which deadlocks against uvloop.
+    """
+    from alembic import command
+
+    cfg = _alembic_config()
+    cfg.attributes["connection"] = connection
+    command.upgrade(cfg, "head")
 
 
 async def get_session() -> AsyncGenerator[AsyncSession]:
