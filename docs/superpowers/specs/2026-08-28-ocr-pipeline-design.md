@@ -42,8 +42,15 @@ in production, and OpenRouter fetches images from its own servers. Making it
 reachable would mean publishing the object store.
 
 So the runner downloads the object server-side and sends a `data:` URI. This
-costs bandwidth per extraction and requires a new `storage.download_object`
-helper.
+costs bandwidth per extraction and requires a new helper beside the existing
+ones in `app/services/storage.py`:
+
+```python
+def download_object(key: str) -> tuple[bytes, str]:  # bytes + content type
+```
+
+It joins `upload_fileobj`, `presigned_get_url` and the currently-unused
+`delete_object`.
 
 ### Extraction is separated from scheduling
 
@@ -66,6 +73,13 @@ app/workers/ocr_runner.py  SCHEDULING. Knows the database and the clock.
 Detaching later is `OCR_MODE=off` on the API plus a container running
 `python -m app.workers.ocr` — a compose entry, not a rewrite, because the
 runner has no HTTP dependency.
+
+**In `inline` mode, a failed extraction must never fail the submit.** The
+survey is committed first; extraction runs after, and any `OcrError` is caught,
+recorded on the row as `failed`, and swallowed. An agent standing in a hospital
+corridor must not lose a filed survey because OpenRouter returned a 429. Inline
+mode also skips the claim step — the row was just created by this request and
+nothing else can be holding it.
 
 ### Claim-then-work, not a long transaction
 
@@ -108,7 +122,8 @@ chamber_surveys
   ocr_status         CHECK extended to
                        ('pending','processing','done','failed')
   + ocr_attempts      INTEGER NOT NULL DEFAULT 0
-  + ocr_error         TEXT NULL           last failure, shown to the admin
+  + ocr_error         TEXT NULL           last failure, shown to the admin;
+                                          truncated to 1000 chars on write
   + ocr_started_at    TIMESTAMPTZ NULL    how the reaper finds crashed claims
   + ocr_completed_at  TIMESTAMPTZ NULL
 ```
@@ -201,6 +216,10 @@ makes a real OpenRouter call.**
   from both; PATCH on an unknown id is 404.
 - **key absent** — with `OPENROUTER_API_KEY` empty the worker does not start
   and no row is claimed.
+- **inline never loses a survey** — with `OCR_MODE=inline` and the transport
+  returning 500, `POST /api/surveys` still returns 201 and the row exists with
+  `ocr_status='failed'`.
+- **error text is bounded** — a 5,000-character failure is stored truncated.
 
 ## Explicitly out of scope
 
