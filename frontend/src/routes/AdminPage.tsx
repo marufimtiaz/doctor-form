@@ -137,7 +137,7 @@ export default function AdminPage() {
       <h1 className="text-2xl font-semibold tracking-tight">All surveys</h1>
 
       {stats && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
             { value: stats.total, label: "total surveys" },
             { value: stats.today, label: "today" },
