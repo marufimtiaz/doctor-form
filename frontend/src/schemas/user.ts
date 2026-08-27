@@ -13,4 +13,4 @@ export const createUserSchema = z.object({
     .max(PASSWORD_MAX, `Must be at most ${PASSWORD_MAX} characters.`),
 });
 
-export type CreateUserForm = z.infer<typeof createUserSchema>;
+export type CreateUserForm = z.input<typeof createUserSchema>;
