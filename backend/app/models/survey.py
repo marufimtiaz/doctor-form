@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, Column, DateTime
+from sqlalchemy import CheckConstraint, Column, DateTime, Integer
 from sqlmodel import Field, SQLModel
 
 
@@ -23,7 +23,8 @@ class ChamberSurvey(SQLModel, table=True):
             name="ck_surveys_location",
         ),
         CheckConstraint(
-            "ocr_status IN ('pending', 'done', 'failed')", name="ck_surveys_ocr_status"
+            "ocr_status IN ('pending', 'processing', 'done', 'failed')",
+            name="ck_surveys_ocr_status",
         ),
     )
 
@@ -50,6 +51,24 @@ class ChamberSurvey(SQLModel, table=True):
     doctor_name: str | None = Field(default=None, max_length=200)
     doctor_degrees: str | None = Field(default=None, max_length=1000)
     doctor_specializations: str | None = Field(default=None, max_length=1000)
+    # server_default: these are NOT NULL on a table that already has rows.
+    ocr_attempts: int = Field(
+        default=0, sa_column=Column(Integer, nullable=False, server_default="0")
+    )
+    # Truncated to 1000 chars on write; a model returning prose would otherwise
+    # write an unbounded string into every failed row.
+    ocr_error: str | None = Field(default=None, max_length=1000)
+    ocr_started_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    # Backoff between attempts. Without it the poll loop re-claims a failed row
+    # on the very next pass and hammers a failing API.
+    ocr_next_attempt_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), index=True, nullable=True)
+    )
+    ocr_completed_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
 
     created_at: datetime = Field(
         default_factory=_utcnow,

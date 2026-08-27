@@ -134,3 +134,31 @@ async def test_new_users_have_no_password_and_version_one(session: AsyncSession)
     assert user.password_hash is None
     assert user.password_set_at is None
     assert user.token_version == 1
+
+
+async def test_survey_starts_with_no_ocr_attempts(session: AsyncSession):
+    user = await _agent(session)
+    survey = _survey(user.id, city="Dhaka", district="Dhaka")
+    session.add(survey)
+    await session.commit()
+    await session.refresh(survey)
+    assert survey.ocr_status == "pending"
+    assert survey.ocr_attempts == 0
+    assert survey.ocr_error is None
+    assert survey.ocr_started_at is None
+    assert survey.ocr_next_attempt_at is None
+    assert survey.ocr_completed_at is None
+
+
+async def test_processing_is_now_a_valid_ocr_status(session: AsyncSession):
+    user = await _agent(session)
+    survey = _survey(user.id, city="Dhaka", district="Dhaka", ocr_status="processing")
+    session.add(survey)
+    await session.commit()
+
+
+async def test_an_unknown_ocr_status_is_still_rejected(session: AsyncSession):
+    user = await _agent(session)
+    session.add(_survey(user.id, city="Dhaka", district="Dhaka", ocr_status="wat"))
+    with pytest.raises(IntegrityError):
+        await session.commit()
