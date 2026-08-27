@@ -14,7 +14,7 @@ import {
   type Survey,
   type UserPublic,
 } from "@/api";
-import PasswordForm from "@/components/PasswordForm";
+import { SetPasswordForm } from "@/components/PasswordForm";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,7 +55,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { describePlace, describeSlot } from "@/routes/AgentPage";
+import { describePlace, describeSlot } from "@/lib/formatters";
 import { createUserSchema, type CreateUserForm } from "@/schemas/user";
 
 export default function AdminPage() {
@@ -410,8 +410,7 @@ export default function AdminPage() {
             </DialogDescription>
           </DialogHeader>
           {resetting && (
-            <PasswordForm
-              requireCurrent={false}
+            <SetPasswordForm
               submitLabel="Set new password"
               onSubmit={async (next) => {
                 await resetPassword(resetting.id, next);

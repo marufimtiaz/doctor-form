@@ -9,13 +9,12 @@ import {
   listMySurveys,
   myStats,
   TOKEN_KEY,
-  type Slot,
   type Stats,
   type Survey,
 } from "@/api";
 import LocationInput from "@/components/LocationInput";
 import NameplateInput from "@/components/NameplateInput";
-import PasswordForm from "@/components/PasswordForm";
+import ChangePasswordForm from "@/components/PasswordForm";
 import PhoneEditor from "@/components/PhoneEditor";
 import SlotEditor from "@/components/SlotEditor";
 import { Button } from "@/components/ui/button";
@@ -35,26 +34,12 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { describePlace, describeSlot } from "@/lib/formatters";
 import {
   emptySurveyValues,
   surveySchema,
   type SurveyForm,
 } from "@/schemas/survey";
-
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-export function describeSlot(slot: Slot): string {
-  return `${DAY_LABELS[slot.day_of_week]} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`;
-}
-
-export function describePlace(s: Survey): string {
-  const parts: string[] = [];
-  if (s.city && s.district) parts.push(`${s.city}, ${s.district}`);
-  if (s.latitude !== null && s.longitude !== null) {
-    parts.push(`(${s.latitude.toFixed(4)}, ${s.longitude.toFixed(4)})`);
-  }
-  return parts.join(" ");
-}
 
 export default function AgentPage() {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -62,6 +47,7 @@ export default function AgentPage() {
   const [loading, setLoading] = useState(true);
   const [nameplate, setNameplate] = useState<File | null>(null);
   const [nameplateError, setNameplateError] = useState<string | null>(null);
+  const [resetKey, setResetKey] = useState(0);
 
   const form = useForm<SurveyForm>({
     resolver: zodResolver(surveySchema),
@@ -112,6 +98,7 @@ export default function AgentPage() {
       await createSurvey(body);
       form.reset(emptySurveyValues());
       setNameplate(null);
+      setResetKey((k) => k + 1);
       toast.success("Survey submitted.");
       await refresh();
     } catch (err) {
@@ -170,7 +157,11 @@ export default function AgentPage() {
                 )}
               />
 
-              <LocationInput control={form.control} setValue={form.setValue} />
+              <LocationInput
+                key={resetKey}
+                control={form.control}
+                setValue={form.setValue}
+              />
               <NameplateInput
                 file={nameplate}
                 onChange={setNameplate}
@@ -187,7 +178,12 @@ export default function AgentPage() {
                     <FormItem>
                       <FormLabel>Patients per day</FormLabel>
                       <FormControl>
-                        <Input type="number" min={1} {...field} value={(field.value as string | number) ?? ""} />
+                        <Input
+                          type="number"
+                          min={1}
+                          {...field}
+                          value={(field.value as string | number) ?? ""}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -200,7 +196,12 @@ export default function AgentPage() {
                     <FormItem>
                       <FormLabel>Minutes per patient</FormLabel>
                       <FormControl>
-                        <Input type="number" min={1} {...field} value={(field.value as string | number) ?? ""} />
+                        <Input
+                          type="number"
+                          min={1}
+                          {...field}
+                          value={(field.value as string | number) ?? ""}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -213,7 +214,12 @@ export default function AgentPage() {
                     <FormItem>
                       <FormLabel>Fee (BDT)</FormLabel>
                       <FormControl>
-                        <Input type="number" min={0} {...field} value={(field.value as string | number) ?? ""} />
+                        <Input
+                          type="number"
+                          min={0}
+                          {...field}
+                          value={(field.value as string | number) ?? ""}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -289,8 +295,7 @@ export default function AgentPage() {
             <CardTitle className="text-base">Change password</CardTitle>
           </CardHeader>
           <CardContent>
-            <PasswordForm
-              requireCurrent
+            <ChangePasswordForm
               submitLabel="Change password"
               onSubmit={async (next, current) => {
                 const resp = await changePassword(current, next);

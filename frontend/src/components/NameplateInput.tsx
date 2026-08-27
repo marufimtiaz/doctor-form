@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,6 +18,25 @@ export default function NameplateInput({
 }) {
   const [preview, setPreview] = useState<string | null>(null);
   const [sizeError, setSizeError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!file) {
+      setPreview(null);
+      setSizeError(null);
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [file]);
 
   const message = sizeError ?? error ?? null;
 
@@ -29,6 +48,7 @@ export default function NameplateInput({
         from this image later.
       </p>
       <Input
+        ref={inputRef}
         type="file"
         accept="image/*"
         aria-label="Nameplate photo"
@@ -37,12 +57,10 @@ export default function NameplateInput({
           // Checked here so a 10MB upload does not travel before being refused.
           if (picked && picked.size > MAX_BYTES) {
             setSizeError("Image is larger than 10MB.");
-            setPreview(null);
             onChange(null);
             return;
           }
           setSizeError(null);
-          setPreview(picked ? URL.createObjectURL(picked) : null);
           onChange(picked);
         }}
       />

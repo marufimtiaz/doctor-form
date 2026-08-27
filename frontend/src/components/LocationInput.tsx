@@ -1,7 +1,8 @@
 import { LocateFixed } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Control, UseFormSetValue } from "react-hook-form";
 
+import { Button } from "@/components/ui/button";
 import {
   FormControl,
   FormField,
@@ -23,7 +24,7 @@ export default function LocationInput({
     "idle",
   );
 
-  useEffect(() => {
+  const getGPS = useCallback(() => {
     if (!navigator.geolocation) {
       setGeoState("denied");
       return;
@@ -44,16 +45,32 @@ export default function LocationInput({
     );
   }, [setValue]);
 
+  useEffect(() => {
+    getGPS();
+  }, [getGPS]);
+
   return (
     <fieldset className="space-y-3 rounded-lg border p-4">
-      <div className="flex items-center gap-2">
-        <Label className="text-sm font-medium">Location</Label>
-        {geoState === "asking" && (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <LocateFixed className="size-3 animate-pulse" aria-hidden />
-            Finding your position…
-          </span>
-        )}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Label className="text-sm font-medium">Location</Label>
+          {geoState === "asking" && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <LocateFixed className="size-3 animate-pulse" aria-hidden />
+              Finding position…
+            </span>
+          )}
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+          onClick={getGPS}
+        >
+          <LocateFixed className="mr-1 size-3.5" aria-hidden />
+          Refetch GPS
+        </Button>
       </div>
       {geoState === "denied" && (
         <p className="text-xs text-muted-foreground">
