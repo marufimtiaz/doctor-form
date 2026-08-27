@@ -27,9 +27,13 @@ locally, Caddy in production — so no CORS is needed in prod.
 
 ## Roles
 
-Two roles, and **no authentication yet**. A user picks who they are from
-`GET /api/users`; the choice is kept in `localStorage` and sent as `X-User-Id`.
-Anyone can send any id — this is a role structure, not a security boundary.
+Two roles, behind phone + password authentication. Sign in with the phone an
+administrator registered; the server returns a 30-day HS256 JWT, which the
+browser stores and sends as `Authorization: Bearer`.
+
+There are no self-service registrations and no password resets by email or SMS:
+an administrator creates each account with an initial password and hands it over
+directly, and the user changes it from their own page.
 
 | Role  | Sees |
 | ----- | ---- |
@@ -52,11 +56,22 @@ chamber phone numbers, throughput, consultation fee, and a **required nameplate
 photograph**. The doctor's name, degrees and specializations are left NULL for a
 future OCR pass to fill from that photograph; `ocr_status` starts at `pending`.
 
-**Migrating to real login** touches three places: `get_current_user` in
-`app/core/deps.py` (read a verified token instead of the header), the `request()`
-wrapper in `frontend/src/api.ts` (send `Authorization` instead of `X-User-Id`),
-and `IdentityProvider` in `frontend/src/auth.tsx` (a login form instead of a
-picker). No route, model, or page changes.
+**Revocation without a sessions table.** `get_current_user` loads the user row
+on every request anyway, for `role` and `is_active`, so two checks come free:
+
+- deactivating a user (`PATCH /api/users/{id}`) rejects their existing token on
+  the next request;
+- changing or resetting a password bumps `token_version`, which is carried in
+  every token and compared against the row — so it signs out every other device.
+
+A self change-password returns a fresh token, so you are not signed out by your
+own change. An admin reset does not, which is the point of a reset.
+
+**Upgrading a database that predates authentication:** the admin seed only fires
+on an empty `users` table, so existing rows would all have NULL password hashes
+and nobody could log in. On boot the configured `ADMIN_PHONE` is adopted — given
+the `ADMIN_PASSWORD` hash — but only if its hash is NULL, so a password somebody
+actually set is never overwritten. Everyone else is reset by that admin.
 
 Deletion is soft: `deleted_at` is set and the nameplate stays in storage, so
 field data remains auditable.
@@ -70,16 +85,24 @@ checkout with no compose stack up.
 
 ```bash
 cd backend
-uv run alembic revision --autogenerate -m "what changed"
+DEBUG=true uv run alembic revision --autogenerate -m "what changed"
 ```
+
+`DEBUG=true` is needed because the CLI loads application settings, and the
+startup guard refuses the development `JWT_SECRET` when debug is off.
 
 `tests/test_migrations.py` asserts the migrations and the models agree, because
 autogenerate drift is silent until a column is missing in production.
 
 ## Known gaps
 
-- **No authentication.** See Roles above. `<RequireAdmin>` is a UX guard; the
-  only enforcement is the server's 403.
+- **No rate limiting on `/api/auth/login`.** Nothing stops an attacker guessing
+  passwords as fast as the network allows. Argon2 makes each attempt expensive,
+  which helps but is not a substitute. This belongs with rate limiting across
+  the whole API rather than bolted onto one endpoint.
+- **No self-service password reset.** There is no email or SMS channel, so a
+  forgotten password needs an administrator.
+- **No audit log of sign-in attempts.**
 - **No frontend test runner**, and `npm run lint` is a scaffold stub — ESLint is
   not installed. The frontend's real gate is `npm run build` (`tsc --noEmit` +
   Vite). Adding vitest and ESLint would be a worthwhile next step.
@@ -136,14 +159,19 @@ cd frontend && npm install && npm run dev
 
 ## API
 
-Everything except health and `GET /api/users` needs an `X-User-Id` header.
+Everything except `/api/healthz`, `/api/readyz`, and `POST /api/auth/login`
+requires an `Authorization: Bearer <token>` header.
 
 | Method   | Path                        | Gate    | Notes                                     |
 | -------- | --------------------------- | ------- | ----------------------------------------- |
 | `GET`    | `/api/healthz`              | —       | Liveness; touches no dependencies          |
 | `GET`    | `/api/readyz`               | —       | Per-dependency readiness report            |
-| `GET`    | `/api/users`                | public  | Identity picker feed; never returns phones |
-| `POST`   | `/api/users`                | admin   | Create an agent or another admin           |
+| `POST`   | `/api/auth/login`           | public  | `{phone, password}` → token + user          |
+| `GET`    | `/api/auth/me`              | user    | The authenticated user                      |
+| `POST`   | `/api/auth/change-password` | user    | Bumps `token_version`, returns a new token  |
+| `GET`    | `/api/users`                | admin   | Roster; never returns phones                |
+| `POST`   | `/api/users`                | admin   | Create an agent or admin; requires a password |
+| `POST`   | `/api/users/{id}/reset-password` | admin | Signs that user out everywhere         |
 | `PATCH`  | `/api/users/{id}`           | admin   | Toggle `is_active`                         |
 | `GET`    | `/api/surveys`              | user    | The caller's own surveys only              |
 | `POST`   | `/api/surveys`              | user    | `multipart/form-data`, nameplate required, 10MB cap |
@@ -213,6 +241,10 @@ Backend settings (env vars, see `backend/app/core/config.py`):
 | `ADMIN_NAME`             | `Admin`                          | Seeded first admin's name        |
 | `ADMIN_PHONE`            | `+8801700000000`                 | Seeded first admin's phone (E.164) |
 | `SEED_DEMO_DATA`         | `false`                          | Seed 3 demo agents on a fresh DB; **dev only** |
+| `JWT_SECRET`             | *(dev default; boot fails in prod)* | Token signing key; min 32 chars |
+| `ACCESS_TOKEN_TTL_DAYS`  | `30`                             | Token lifetime                   |
+| `ADMIN_PASSWORD`         | *(dev default; boot fails in prod)* | Seeded admin's password      |
+| `DEMO_PASSWORD`          | `demo-password`                  | Demo agents' password (dev only) |
 
 ### Connecting a GUI
 
