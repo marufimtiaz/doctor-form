@@ -125,3 +125,12 @@ async def test_slot_times_must_be_ordered(session: AsyncSession):
     )
     with pytest.raises(IntegrityError):
         await session.commit()
+
+
+async def test_new_users_have_no_password_and_version_one(session: AsyncSession):
+    user = await _agent(session)
+    # NULL hash means "cannot log in until an admin sets one" - existing rows
+    # are deliberately not grandfathered into a usable state.
+    assert user.password_hash is None
+    assert user.password_set_at is None
+    assert user.token_version == 1

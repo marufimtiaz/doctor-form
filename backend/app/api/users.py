@@ -6,8 +6,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
 from app.core.deps import AdminUser
+from app.core.security import hash_password
 from app.db.session import SessionDep
 from app.models.user import User
+from app.schemas.auth import SetPasswordRequest
 from app.schemas.user import UserCreate, UserPublic, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -18,11 +20,9 @@ def _utcnow() -> datetime:
 
 
 @router.get("", response_model=list[UserPublic])
-async def list_users(session: SessionDep) -> list[User]:
-    """Public: the client cannot pick an identity it cannot see.
-
-    UserPublic omits phone, so this exposes names and roles only.
-    """
+async def list_users(session: SessionDep, _: AdminUser) -> list[User]:
+    """Admin-only. This fed the identity picker when there was no login; a
+    public roster is now just a list of valid login names for an attacker."""
     result = await session.exec(select(User).order_by(User.name))
     return list(result.all())
 
@@ -34,6 +34,8 @@ async def create_user(payload: UserCreate, session: SessionDep, _: AdminUser) ->
         phone=payload.phone,  # already E.164 via the schema validator
         company=payload.company,
         role=payload.role,
+        password_hash=hash_password(payload.password),
+        password_set_at=_utcnow(),
     )
     session.add(user)
     try:
@@ -60,3 +62,20 @@ async def set_user_active(
     await session.commit()
     await session.refresh(user)
     return user
+
+
+@router.post("/{user_id}/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_password(
+    user_id: UUID, payload: SetPasswordRequest, session: SessionDep, _: AdminUser
+) -> None:
+    """Bumping token_version logs the user out of every device, which is the
+    point: a reset exists because the account may be in the wrong hands."""
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
+    user.password_hash = hash_password(payload.password)
+    user.password_set_at = _utcnow()
+    user.updated_at = _utcnow()
+    user.token_version += 1
+    session.add(user)
+    await session.commit()

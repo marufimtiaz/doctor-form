@@ -60,6 +60,10 @@ services:
       S3_BUCKET: ${S3_BUCKET:-uploads}
       # Local convenience: a torn-down stack comes back with usable agents.
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me-before-deploying}
+      ACCESS_TOKEN_TTL_DAYS: ${ACCESS_TOKEN_TTL_DAYS:-30}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-dev-only-admin-password}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-demo-password}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:

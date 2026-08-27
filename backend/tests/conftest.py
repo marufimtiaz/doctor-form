@@ -8,6 +8,10 @@ from moto.server import ThreadedMotoServer
 # Must be set before app.core.config is imported, since Settings is cached.
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./test.db")
 os.environ.setdefault("S3_BOOTSTRAP", "false")
+# The startup guard refuses insecure defaults whenever debug is false, and the
+# suite does not set DEBUG.
+os.environ.setdefault("JWT_SECRET", "test-secret-long-enough-for-hmac-sha256-abcdef")
+os.environ.setdefault("ADMIN_PASSWORD", "test-admin-password")
 
 # A real S3 server on localhost, not moto's in-process patching: moto only
 # intercepts calls aimed at AWS's own endpoints, and this app always points
@@ -28,6 +32,7 @@ from asgi_lifespan import LifespanManager  # noqa: E402
 from sqlmodel import SQLModel  # noqa: E402
 
 from app.core.config import get_settings  # noqa: E402
+from app.core.security import create_access_token  # noqa: E402
 from app.db.session import SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.user import User  # noqa: E402
@@ -97,5 +102,10 @@ async def make_user():
 
 
 def auth(user: User) -> dict[str, str]:
-    """Headers that identify `user`. Where a bearer token will go later."""
-    return {"X-User-Id": str(user.id)}
+    """Headers that authenticate `user`.
+
+    The single place tests build credentials, which is why swapping the whole
+    identity mechanism leaves the other test modules untouched.
+    """
+    token = create_access_token(user.id, user.token_version)
+    return {"Authorization": f"Bearer {token}"}

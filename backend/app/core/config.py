@@ -1,6 +1,15 @@
+from __future__ import annotations
+
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Sentinel values. The app refuses to boot with these when debug is off, so a
+# forgotten secret fails loudly at deploy time instead of silently shipping a
+# signing key that anyone reading this repository knows.
+DEV_JWT_SECRET = "dev-only-insecure-change-me-before-deploying"
+DEV_ADMIN_PASSWORD = "dev-only-admin-password"
 
 
 class Settings(BaseSettings):
@@ -21,6 +30,20 @@ class Settings(BaseSettings):
     # comes back usable. Never enable in production: these are real, usable
     # identities in a system that does not check passwords.
     seed_demo_data: bool = False
+
+    # Signing key for access tokens. A known default would let anyone forge an
+    # admin token, so production must override it.
+    jwt_secret: str = DEV_JWT_SECRET
+    jwt_algorithm: str = "HS256"
+    # One long-lived token; there is no refresh token. Revocation comes from
+    # is_active and token_version, both checked on every request.
+    access_token_ttl_days: int = 30
+
+    # Password for the seeded first admin. Without it the admin would have no
+    # hash, nobody could log in, and nobody could create a user who could.
+    admin_password: str = DEV_ADMIN_PASSWORD
+    # Only read when seed_demo_data is true, which production pins off.
+    demo_password: str = "demo-password"
 
     # Comma-separated list of allowed origins for CORS.
     cors_origins: str = "http://localhost:5173"
@@ -54,6 +77,29 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @model_validator(mode="after")
+    def _refuse_insecure_defaults(self) -> Settings:
+        if self.debug:
+            return self
+        if self.jwt_secret == DEV_JWT_SECRET:
+            raise ValueError(
+                "JWT_SECRET is still the development default. Set it, or anyone "
+                "who has read this repository can forge an admin token."
+            )
+        # RFC 7518 3.2: an HMAC key shorter than the hash output weakens the
+        # signature. PyJWT warns about this; better to refuse than to warn.
+        if len(self.jwt_secret) < 32:
+            raise ValueError(
+                f"JWT_SECRET must be at least 32 characters (got {len(self.jwt_secret)}). "
+                "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+            )
+        if self.admin_password == DEV_ADMIN_PASSWORD:
+            raise ValueError(
+                "ADMIN_PASSWORD is still the development default. Set it before "
+                "the first boot seeds the admin account."
+            )
+        return self
 
 
 @lru_cache

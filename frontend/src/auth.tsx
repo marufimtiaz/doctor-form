@@ -9,97 +9,74 @@ import {
 } from "react";
 import { Navigate } from "react-router-dom";
 
-import { listUsers, USER_ID_KEY, type UserPublic } from "./api";
+import {
+  login as loginRequest,
+  me,
+  setUnauthorizedHandler,
+  TOKEN_KEY,
+  type UserPublic,
+} from "./api";
 
-interface Identity {
+interface Auth {
   user: UserPublic | null;
-  users: UserPublic[];
   loading: boolean;
-  switchUser: (id: string) => void;
-  clear: () => void;
+  login: (phone: string, password: string) => Promise<void>;
+  logout: () => void;
 }
 
-const IdentityContext = createContext<Identity | null>(null);
+const AuthContext = createContext<Auth | null>(null);
 
-export function IdentityProvider({ children }: { children: ReactNode }) {
-  const [users, setUsers] = useState<UserPublic[]>([]);
-  const [userId, setUserId] = useState<string | null>(() =>
-    localStorage.getItem(USER_ID_KEY),
-  );
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<UserPublic | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY);
+    setUser(null);
+  }, []);
+
   useEffect(() => {
-    listUsers()
-      .then(setUsers)
-      .catch(() => setUsers([]))
+    // Any 401 from anywhere drops us back to the login screen.
+    setUnauthorizedHandler(() => setUser(null));
+  }, []);
+
+  useEffect(() => {
+    // A stored token may be expired or revoked; /auth/me is what settles it.
+    if (!localStorage.getItem(TOKEN_KEY)) {
+      setLoading(false);
+      return;
+    }
+    me()
+      .then(setUser)
+      .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
-  const switchUser = useCallback((id: string) => {
-    localStorage.setItem(USER_ID_KEY, id);
-    setUserId(id);
+  const login = useCallback(async (phone: string, password: string) => {
+    const resp = await loginRequest(phone, password);
+    localStorage.setItem(TOKEN_KEY, resp.access_token);
+    setUser(resp.user);
   }, []);
-
-  const clear = useCallback(() => {
-    localStorage.removeItem(USER_ID_KEY);
-    setUserId(null);
-  }, []);
-
-  // A stored id that no longer matches a real user (deactivated, or the
-  // database was reset) must not leave the app stuck sending 401s.
-  const user = useMemo(
-    () => users.find((u) => u.id === userId) ?? null,
-    [users, userId],
-  );
 
   const value = useMemo(
-    () => ({ user, users, loading, switchUser, clear }),
-    [user, users, loading, switchUser, clear],
+    () => ({ user, loading, login, logout }),
+    [user, loading, login, logout],
   );
 
-  return (
-    <IdentityContext.Provider value={value}>{children}</IdentityContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useIdentity(): Identity {
-  const ctx = useContext(IdentityContext);
-  if (!ctx) throw new Error("useIdentity must be used inside IdentityProvider");
+export function useAuth(): Auth {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
   return ctx;
 }
 
-/** UX guard only. The identity is client-chosen, so anyone can set the
- *  localStorage key - the real enforcement is the server's 403. This exists so
- *  an agent does not land on a page that would only show them errors. */
+/** The role now comes from a signed token rather than a value the client chose,
+ *  so this is a real check - but the server's 403 is still the enforcement. */
 export function RequireAdmin({ children }: { children: ReactNode }) {
-  const { user, loading } = useIdentity();
+  const { user, loading } = useAuth();
   if (loading) return <p className="muted">Loading…</p>;
   if (!user || user.role !== "admin") return <Navigate to="/" replace />;
   return <>{children}</>;
-}
-
-export function IdentityPicker() {
-  const { users, switchUser, loading } = useIdentity();
-  if (loading) return <p className="muted">Loading…</p>;
-  return (
-    <main className="wrap">
-      <header>
-        <h1>Who are you?</h1>
-        <p className="sub">
-          Pick your name to continue. There is no password yet — this selects a
-          role, it does not prove one.
-        </p>
-      </header>
-      <ul className="list">
-        {users.map((u) => (
-          <li key={u.id} className="card">
-            <button className="link" onClick={() => switchUser(u.id)}>
-              <strong>{u.name}</strong> · {u.company} · {u.role}
-            </button>
-          </li>
-        ))}
-      </ul>
-      {users.length === 0 && <p className="muted">No users exist yet.</p>}
-    </main>
-  );
 }

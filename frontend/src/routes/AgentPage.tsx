@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
+  changePassword,
   createSurvey,
   listMySurveys,
   myStats,
+  TOKEN_KEY,
   type Slot,
   type Stats,
   type Survey,
@@ -14,6 +16,7 @@ import LocationInput, {
   type LocationValue,
 } from "../components/LocationInput";
 import NameplateInput from "../components/NameplateInput";
+import PasswordForm from "../components/PasswordForm";
 import PhoneEditor from "../components/PhoneEditor";
 import SlotEditor, { emptySlot } from "../components/SlotEditor";
 
@@ -206,6 +209,21 @@ export default function AgentPage() {
             ))}
           </ul>
         )}
+      </section>
+
+      <section>
+        <h2>Account</h2>
+        <PasswordForm
+          requireCurrent
+          submitLabel="Change password"
+          onSubmit={async (next, current) => {
+            const resp = await changePassword(current, next);
+            // The change bumps token_version, so the token we hold is now dead.
+            // Storing the replacement keeps this session alive while every
+            // other device is signed out.
+            localStorage.setItem(TOKEN_KEY, resp.access_token);
+          }}
+        />
       </section>
     </main>
   );

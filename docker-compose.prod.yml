@@ -72,6 +72,12 @@ services:
       # Hard-coded off: demo agents are real logins in a system with no
       # passwords, so this must not be switchable from the environment.
       SEED_DEMO_DATA: "false"
+      # No defaults on purpose. An unset value leaves the development default
+      # in place and the app then refuses to boot - which is the intended
+      # outcome, loudly, rather than a forgeable signing key.
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ACCESS_TOKEN_TTL_DAYS: ${ACCESS_TOKEN_TTL_DAYS:-30}
     expose:
       - "8000"
     depends_on:
