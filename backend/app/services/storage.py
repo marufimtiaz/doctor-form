@@ -75,3 +75,16 @@ def presigned_get_url(key: str) -> str:
 def delete_object(key: str) -> None:
     settings = get_settings()
     get_s3_client().delete_object(Bucket=settings.s3_bucket, Key=key)
+
+
+def download_object(key: str) -> tuple[bytes, str]:
+    """Fetch an object's bytes and its stored content type.
+
+    The OCR runner needs the image itself, not a link: OpenRouter fetches
+    images from its own servers, and a presigned URL here points at an
+    address only this network can reach.
+    """
+    settings = get_settings()
+    resp = get_s3_client().get_object(Bucket=settings.s3_bucket, Key=key)
+    content_type = resp.get("ContentType") or "application/octet-stream"
+    return resp["Body"].read(), content_type

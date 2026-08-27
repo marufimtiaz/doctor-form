@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Sentinel values. The app refuses to boot with these when debug is off, so a
@@ -44,6 +44,24 @@ class Settings(BaseSettings):
     admin_password: str = DEV_ADMIN_PASSWORD
     # Only read when seed_demo_data is true, which production pins off.
     demo_password: str = "demo-password"
+
+    # Where extraction runs. "worker" polls in the background, "inline" runs it
+    # during POST /api/surveys, "off" runs nothing. Changing this is how the
+    # work moves inline or into a detached service - no code change.
+    ocr_mode: str = "worker"
+    # Empty disables extraction without preventing boot: OCR enriches data, it
+    # does not gate the system.
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    # Swappable without a deploy: which Gemma reads a Bangla-English nameplate
+    # better cannot be known without trying both against real photographs.
+    ocr_model: str = "google/gemma-4-31b-it"
+    ocr_poll_seconds: int = 10
+    ocr_batch_size: int = 5
+    ocr_max_attempts: int = 3
+    ocr_timeout_seconds: int = 60
+    # A claimed row whose process died is returned to pending after this.
+    ocr_stale_minutes: int = 15
 
     # Comma-separated list of allowed origins for CORS.
     cors_origins: str = "http://localhost:5173"
@@ -100,6 +118,13 @@ class Settings(BaseSettings):
                 "the first boot seeds the admin account."
             )
         return self
+
+    @field_validator("ocr_mode")
+    @classmethod
+    def _known_ocr_mode(cls, value: str) -> str:
+        if value not in ("worker", "inline", "off"):
+            raise ValueError("ocr_mode must be 'worker', 'inline' or 'off'")
+        return value
 
 
 @lru_cache
