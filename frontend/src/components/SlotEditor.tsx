@@ -1,86 +1,118 @@
-import type { Slot } from "../api";
+import { Plus, X } from "lucide-react";
+import { useFieldArray, type Control } from "react-hook-form";
 
-// Displayed Saturday-first for Bangladesh; the values stay 0=Monday so the
+import { Button } from "@/components/ui/button";
+import {
+  FormControl,
+  FormField,
+  FormItem,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { emptySlot, type SurveyForm } from "@/schemas/survey";
+
+// Rendered Saturday-first for Bangladesh; the values stay 0=Monday so the
 // database never learns about display order.
 const DAYS = [
-  { value: 5, label: "Sat" },
-  { value: 6, label: "Sun" },
-  { value: 0, label: "Mon" },
-  { value: 1, label: "Tue" },
-  { value: 2, label: "Wed" },
-  { value: 3, label: "Thu" },
-  { value: 4, label: "Fri" },
+  { value: "5", label: "Sat" },
+  { value: "6", label: "Sun" },
+  { value: "0", label: "Mon" },
+  { value: "1", label: "Tue" },
+  { value: "2", label: "Wed" },
+  { value: "3", label: "Thu" },
+  { value: "4", label: "Fri" },
 ];
 
-export const emptySlot = (): Slot => ({
-  day_of_week: 5,
-  start_time: "17:00",
-  end_time: "20:00",
-});
-
 export default function SlotEditor({
-  slots,
-  onChange,
+  control,
 }: {
-  slots: Slot[];
-  onChange: (slots: Slot[]) => void;
+  control: Control<SurveyForm>;
 }) {
-  const update = (i: number, patch: Partial<Slot>) =>
-    onChange(slots.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+  const { fields, append, remove } = useFieldArray({ control, name: "slots" });
 
   return (
-    <fieldset>
-      <legend>Availability</legend>
-      {slots.map((slot, i) => (
-        <div key={i}>
-          <div className="row">
-            <select
-              aria-label="Day"
-              value={slot.day_of_week}
-              onChange={(e) => update(i, { day_of_week: Number(e.target.value) })}
-            >
-              {DAYS.map((d) => (
-                <option key={d.value} value={d.value}>
-                  {d.label}
-                </option>
-              ))}
-            </select>
-            <input
-              type="time"
-              aria-label="Start time"
-              required
-              value={slot.start_time}
-              onChange={(e) => update(i, { start_time: e.target.value })}
-            />
-            <input
-              type="time"
-              aria-label="End time"
-              required
-              value={slot.end_time}
-              onChange={(e) => update(i, { end_time: e.target.value })}
-            />
-            {slots.length > 1 && (
-              <button
-                type="button"
-                className="link"
-                onClick={() => onChange(slots.filter((_, idx) => idx !== i))}
-              >
-                Remove
-              </button>
+    <fieldset className="space-y-3 rounded-lg border p-4">
+      <Label className="text-sm font-medium">Availability</Label>
+      {fields.map((field, index) => (
+        <div key={field.id} className="flex flex-wrap items-start gap-2">
+          <FormField
+            control={control}
+            name={`slots.${index}.day_of_week`}
+            render={({ field: day }) => (
+              <FormItem className="w-24">
+                <Select
+                  value={String(day.value)}
+                  onValueChange={(v) => day.onChange(Number(v))}
+                >
+                  <FormControl>
+                    <SelectTrigger aria-label="Day">
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {DAYS.map((d) => (
+                      <SelectItem key={d.value} value={d.value}>
+                        {d.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormItem>
             )}
-          </div>
-          {slot.end_time <= slot.start_time && (
-            <p className="error">End must be after start</p>
+          />
+          <FormField
+            control={control}
+            name={`slots.${index}.start_time`}
+            render={({ field: start }) => (
+              <FormItem className="flex-1 min-w-28">
+                <FormControl>
+                  <Input type="time" aria-label="Start time" {...start} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={control}
+            name={`slots.${index}.end_time`}
+            render={({ field: end }) => (
+              <FormItem className="flex-1 min-w-28">
+                <FormControl>
+                  <Input type="time" aria-label="End time" {...end} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          {fields.length > 1 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => remove(index)}
+              aria-label="Remove slot"
+            >
+              <X className="size-4" aria-hidden />
+            </Button>
           )}
         </div>
       ))}
-      <button
+      <Button
         type="button"
-        className="link"
-        onClick={() => onChange([...slots, emptySlot()])}
+        variant="outline"
+        size="sm"
+        onClick={() => append(emptySlot())}
       >
-        Add slot
-      </button>
+        <Plus className="size-4" aria-hidden /> Add slot
+      </Button>
     </fieldset>
   );
 }

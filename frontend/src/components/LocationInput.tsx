@@ -1,47 +1,27 @@
-import { useEffect, useRef, useState } from "react";
+import { LocateFixed } from "lucide-react";
+import { useEffect, useState } from "react";
+import type { Control, UseFormSetValue } from "react-hook-form";
 
-export interface LocationValue {
-  latitude: string;
-  longitude: string;
-  city: string;
-  district: string;
-}
-
-export const emptyLocation = (): LocationValue => ({
-  latitude: "",
-  longitude: "",
-  city: "",
-  district: "",
-});
-
-/** Either coordinates or city+district; each pair is all-or-nothing. Mirrors
- *  the server's rule so the agent finds out before they submit. */
-export function locationError(v: LocationValue): string | null {
-  const hasLat = v.latitude.trim() !== "";
-  const hasLng = v.longitude.trim() !== "";
-  const hasCity = v.city.trim() !== "";
-  const hasDistrict = v.district.trim() !== "";
-
-  if (hasLat !== hasLng) return "Give both latitude and longitude, or neither.";
-  if (hasCity !== hasDistrict) return "Give both city and district, or neither.";
-  if (!hasLat && !hasCity) return "Provide coordinates or city and district.";
-  return null;
-}
+import {
+  FormControl,
+  FormField,
+  FormItem,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import type { SurveyForm } from "@/schemas/survey";
 
 export default function LocationInput({
-  value,
-  onChange,
+  control,
+  setValue,
 }: {
-  value: LocationValue;
-  onChange: (v: LocationValue) => void;
+  control: Control<SurveyForm>;
+  setValue: UseFormSetValue<SurveyForm>;
 }) {
   const [geoState, setGeoState] = useState<"idle" | "asking" | "ok" | "denied">(
     "idle",
   );
-  // The geolocation callback fires long after mount. Reading `value` from the
-  // mount closure would clobber anything the agent typed while waiting.
-  const latest = useRef(value);
-  latest.current = value;
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -52,64 +32,85 @@ export default function LocationInput({
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setGeoState("ok");
-        onChange({
-          ...latest.current,
-          latitude: pos.coords.latitude.toFixed(6),
-          longitude: pos.coords.longitude.toFixed(6),
-        });
+        // setValue rather than a controlled object: the agent may already be
+        // typing when this resolves, and only these two fields should move.
+        setValue("latitude", pos.coords.latitude.toFixed(6));
+        setValue("longitude", pos.coords.longitude.toFixed(6));
       },
       // Denial is expected and must not block the form - city and district
       // satisfy the requirement on their own.
       () => setGeoState("denied"),
       { enableHighAccuracy: true, timeout: 10000 },
     );
-    // Runs once on mount; re-running would fight the agent's manual edits.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const error = locationError(value);
+  }, [setValue]);
 
   return (
-    <fieldset>
-      <legend>Location</legend>
-      {geoState === "asking" && <p className="muted">Finding your position…</p>}
+    <fieldset className="space-y-3 rounded-lg border p-4">
+      <div className="flex items-center gap-2">
+        <Label className="text-sm font-medium">Location</Label>
+        {geoState === "asking" && (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <LocateFixed className="size-3 animate-pulse" aria-hidden />
+            Finding your position…
+          </span>
+        )}
+      </div>
       {geoState === "denied" && (
-        <p className="muted">
+        <p className="text-xs text-muted-foreground">
           No GPS fix. Type coordinates by hand, or just fill in city and
           district.
         </p>
       )}
-      <div className="row">
-        <input
-          placeholder="Latitude"
-          aria-label="Latitude"
-          inputMode="decimal"
-          value={value.latitude}
-          onChange={(e) => onChange({ ...value, latitude: e.target.value })}
+      <div className="grid grid-cols-2 gap-2">
+        <FormField
+          control={control}
+          name="latitude"
+          render={({ field }) => (
+            <FormItem>
+              <FormControl>
+                <Input placeholder="Latitude" inputMode="decimal" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-        <input
-          placeholder="Longitude"
-          aria-label="Longitude"
-          inputMode="decimal"
-          value={value.longitude}
-          onChange={(e) => onChange({ ...value, longitude: e.target.value })}
+        <FormField
+          control={control}
+          name="longitude"
+          render={({ field }) => (
+            <FormItem>
+              <FormControl>
+                <Input placeholder="Longitude" inputMode="decimal" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={control}
+          name="city"
+          render={({ field }) => (
+            <FormItem>
+              <FormControl>
+                <Input placeholder="City" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={control}
+          name="district"
+          render={({ field }) => (
+            <FormItem>
+              <FormControl>
+                <Input placeholder="District" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
       </div>
-      <div className="row">
-        <input
-          placeholder="City"
-          aria-label="City"
-          value={value.city}
-          onChange={(e) => onChange({ ...value, city: e.target.value })}
-        />
-        <input
-          placeholder="District"
-          aria-label="District"
-          value={value.district}
-          onChange={(e) => onChange({ ...value, district: e.target.value })}
-        />
-      </div>
-      {error && <p className="error">{error}</p>}
     </fieldset>
   );
 }

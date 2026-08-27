@@ -1,39 +1,67 @@
+import { Plus, X } from "lucide-react";
+import { useFieldArray, type Control } from "react-hook-form";
+
+import { Button } from "@/components/ui/button";
+import {
+  FormControl,
+  FormField,
+  FormItem,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import type { SurveyForm } from "@/schemas/survey";
+
 export default function PhoneEditor({
-  phones,
-  onChange,
+  control,
 }: {
-  phones: string[];
-  onChange: (phones: string[]) => void;
+  control: Control<SurveyForm>;
 }) {
+  const { fields, append, remove } = useFieldArray({ control, name: "phones" });
+
   return (
-    <fieldset>
-      <legend>Chamber phone numbers</legend>
-      {phones.map((phone, i) => (
-        <div className="row" key={i}>
-          <input
-            required
-            inputMode="tel"
-            aria-label={`Phone ${i + 1}`}
-            placeholder="01712345678"
-            value={phone}
-            onChange={(e) =>
-              onChange(phones.map((p, idx) => (idx === i ? e.target.value : p)))
-            }
+    <fieldset className="space-y-3 rounded-lg border p-4">
+      <Label className="text-sm font-medium">Chamber phone numbers</Label>
+      {fields.map((field, index) => (
+        <div key={field.id} className="flex items-start gap-2">
+          <FormField
+            control={control}
+            name={`phones.${index}.value`}
+            render={({ field: phone }) => (
+              <FormItem className="flex-1">
+                <FormControl>
+                  <Input
+                    inputMode="tel"
+                    placeholder="01712345678"
+                    aria-label={`Phone ${index + 1}`}
+                    {...phone}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-          {phones.length > 1 && (
-            <button
+          {fields.length > 1 && (
+            <Button
               type="button"
-              className="link"
-              onClick={() => onChange(phones.filter((_, idx) => idx !== i))}
+              variant="ghost"
+              size="icon"
+              onClick={() => remove(index)}
+              aria-label="Remove number"
             >
-              Remove
-            </button>
+              <X className="size-4" aria-hidden />
+            </Button>
           )}
         </div>
       ))}
-      <button type="button" className="link" onClick={() => onChange([...phones, ""])}>
-        Add number
-      </button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => append({ value: "" })}
+      >
+        <Plus className="size-4" aria-hidden /> Add number
+      </Button>
     </fieldset>
   );
 }
