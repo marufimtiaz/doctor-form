@@ -1,10 +1,28 @@
-import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 
-export const PASSWORD_MIN = 8;
+import { Button } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import {
+  changePasswordSchema,
+  setPasswordSchema,
+  type ChangePasswordForm,
+  type SetPasswordForm,
+} from "@/schemas/password";
+
+type Values = ChangePasswordForm | SetPasswordForm;
 
 /** Used both for changing your own password and for an admin resetting
  *  someone else's, which differ only in whether a current password is asked
- *  for. */
+ *  for - and therefore in which schema applies. */
 export default function PasswordForm({
   requireCurrent,
   submitLabel,
@@ -14,79 +32,85 @@ export default function PasswordForm({
   submitLabel: string;
   onSubmit: (next: string, current: string) => Promise<void>;
 }) {
-  const [current, setCurrent] = useState("");
-  const [next, setNext] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const form = useForm<Values>({
+    resolver: zodResolver(requireCurrent ? changePasswordSchema : setPasswordSchema),
+    defaultValues: requireCurrent
+      ? { current_password: "", new_password: "", confirm_password: "" }
+      : { new_password: "", confirm_password: "" },
+  });
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (next.length < PASSWORD_MIN) {
-      setError(`Password must be at least ${PASSWORD_MIN} characters.`);
-      return;
-    }
-    if (next !== confirm) {
-      setError("The two passwords do not match.");
-      return;
-    }
-    setBusy(true);
+  async function submit(values: Values) {
+    const current = "current_password" in values ? values.current_password : "";
     try {
-      await onSubmit(next, current);
-      setCurrent("");
-      setNext("");
-      setConfirm("");
-      setError(null);
-      setDone(true);
+      await onSubmit(values.new_password, current);
+      form.reset();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setDone(false);
-    } finally {
-      setBusy(false);
+      form.setError("root", {
+        message: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
   return (
-    <form className="card" onSubmit={submit}>
-      {error && <div className="error">{error}</div>}
-      {done && <p className="muted">Password updated.</p>}
-      {requireCurrent && (
-        <label>
-          Current password
-          <input
-            required
-            type="password"
-            autoComplete="current-password"
-            value={current}
-            onChange={(e) => setCurrent(e.target.value)}
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(submit)} className="space-y-4">
+        {form.formState.errors.root && (
+          <p className="text-sm text-destructive">
+            {form.formState.errors.root.message}
+          </p>
+        )}
+        {form.formState.isSubmitSuccessful && !form.formState.errors.root && (
+          <p className="text-sm text-muted-foreground">Password updated.</p>
+        )}
+        {requireCurrent && (
+          <FormField
+            control={form.control}
+            name={"current_password" as never}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Current password</FormLabel>
+                <FormControl>
+                  <Input
+                    type="password"
+                    autoComplete="current-password"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-        </label>
-      )}
-      <label>
-        New password
-        <input
-          required
-          type="password"
-          autoComplete="new-password"
-          minLength={PASSWORD_MIN}
-          value={next}
-          onChange={(e) => setNext(e.target.value)}
+        )}
+        <FormField
+          control={form.control}
+          name="new_password"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>New password</FormLabel>
+              <FormControl>
+                <Input type="password" autoComplete="new-password" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </label>
-      <label>
-        Confirm new password
-        <input
-          required
-          type="password"
-          autoComplete="new-password"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
+        <FormField
+          control={form.control}
+          name="confirm_password"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Confirm new password</FormLabel>
+              <FormControl>
+                <Input type="password" autoComplete="new-password" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </label>
-      <button type="submit" disabled={busy}>
-        {busy ? "Saving…" : submitLabel}
-      </button>
-    </form>
+        <Button type="submit" disabled={form.formState.isSubmitting}>
+          {form.formState.isSubmitting ? "Saving…" : submitLabel}
+        </Button>
+      </form>
+    </Form>
   );
 }
