@@ -1,5 +1,6 @@
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,7 +27,19 @@ async def lifespan(app: FastAPI):
     except Exception:  # noqa: BLE001
         # Storage may still be starting; /readyz will keep reporting until it is up.
         logger.exception("bucket bootstrap failed, continuing")
+
+    ocr_task: asyncio.Task | None = None
+    if settings.ocr_mode == "worker":
+        from app.workers.ocr import run_worker_forever
+
+        ocr_task = asyncio.create_task(run_worker_forever())
+
     yield
+
+    if ocr_task is not None:
+        ocr_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await ocr_task
 
 
 app = FastAPI(

@@ -179,4 +179,14 @@ async def create_survey(
         session.add(SurveyPhone(survey_id=row.id, phone=phone))
     await session.commit()
 
+    if settings.ocr_mode == "inline":
+        # Imported here so the API does not depend on the worker package at
+        # module scope, which keeps `OCR_MODE=off` genuinely inert.
+        from app.workers.ocr import process_survey
+
+        # The survey is already committed. process_survey never raises, so a
+        # 429 from OpenRouter cannot cost an agent a filed survey.
+        await process_survey(row.id)
+        await session.refresh(row)
+
     return await survey_to_read(session, row)
