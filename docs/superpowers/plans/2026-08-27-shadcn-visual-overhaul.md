@@ -27,10 +27,10 @@
 `docker-compose.yml` mounts `./frontend:/app` **and an anonymous volume over `/app/node_modules`**, so a host-side `npm install` is invisible to the running container. After adding any dependency:
 
 ```bash
-docker compose up --build -d frontend
+docker compose up -d --build -V frontend
 ```
 
-Skipping this produces `Failed to resolve import` errors in the browser while the host build succeeds — a confusing split-brain worth avoiding.
+**`-V` (`--renew-anon-volumes`) is required, not optional.** Without it Docker reuses the existing anonymous volume, so `--build` alone leaves the stale `node_modules` in place and the dev server dies in a restart loop with `ERR_MODULE_NOT_FOUND: '@tailwindcss/vite'`. The host build keeps succeeding throughout, which makes it a confusing split-brain.
 
 ---
 
@@ -287,7 +287,7 @@ npm install zod@^3
 
 ```bash
 cd frontend && npm run build
-cd .. && docker compose up --build -d frontend
+cd .. && docker compose up -d --build -V frontend
 ```
 
 Expected: build succeeds. Open `http://localhost:5173` — the app still looks
@@ -996,7 +996,7 @@ as `"./index.css"`.
 cd frontend && npm test && npm run build
 ```
 
-Manual, at `http://localhost:5173` after `docker compose up -d frontend`:
+Manual, at `http://localhost:5173` after `docker compose up -d --build -V frontend`:
 
 1. Signed out, the sign-in card is centred and styled; the old CSS no longer
    affects it.
@@ -1881,7 +1881,7 @@ export default function AgentPage() {
 
 ```bash
 cd frontend && npm test && npm run build
-cd .. && docker compose up -d frontend
+cd .. && docker compose up -d --build -V frontend
 ```
 
 Manual, signed in as an agent (create one from the admin page, or use a demo
@@ -2426,8 +2426,28 @@ with:
 - [ ] **Step 2: Delete the compatibility layer**
 
 Remove the `@layer base { *, ::before, ::after { … } }` block added in Task 1.
-Real preflight now supplies `box-sizing`, `border-width: 0` and
+Real preflight supplies `box-sizing`, `border-width: 0` and
 `border-style: solid`.
+
+**It does not supply `border-color`**, which that block also set. Tailwind v4's
+preflight is `border:0 solid`, so a bare `border` utility falls back to
+`currentColor` — near-black hairlines in light mode on every Card, Dialog,
+Alert, outline Button, TableRow and fieldset. Add shadcn's replacement in the
+same commit:
+
+```css
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+}
+```
+
+Add `@custom-variant dark (&:is(.dark *));` directly under
+`@import "tailwindcss";` at the same time: v4's `dark:` variant defaults to
+`@media (prefers-color-scheme)` while the tokens key off the `.dark` class, so
+without it the palette and the primitives' `dark:` utilities are driven by two
+different mechanisms.
 
 - [ ] **Step 3: Delete the legacy stylesheet**
 
@@ -2448,13 +2468,28 @@ Then add the one base rule the app still needs:
 
 - [ ] **Step 4: Prove no legacy class survives**
 
+`\b` word boundaries match *inside* hyphenated utilities, so
+`text-muted-foreground` hits on "muted" and `flex-wrap` hits on "wrap" —
+burying any real leftover in dozens of false positives. Match whole class
+tokens instead:
+
 ```bash
 cd frontend
-grep -rnE 'className="[^"]*\b(wrap|card|row|list|muted|sub|error|link|topbar|stats|preview)\b' src/ \
-  --include="*.tsx" | grep -v "components/ui/"
+python3 - <<'EOF'
+import pathlib, re
+legacy = {"wrap","card","row","list","muted","sub","error","link",
+          "topbar","topbar-links","stats","preview"}
+hits = [f"{f}:{n} '{tok}'"
+        for f in pathlib.Path("src").rglob("*.tsx")
+        if "components/ui/" not in str(f)
+        for n, line in enumerate(f.read_text().splitlines(), 1)
+        for m in re.finditer(r'className="([^"]*)"', line)
+        for tok in m.group(1).split() if tok in legacy]
+print("\n".join(hits) if hits else "clean")
+EOF
 ```
 
-Expected: no output. Any hit is a screen still relying on a stylesheet that no
+Expected: `clean`. Any hit is a screen still relying on a stylesheet that no
 longer exists — fix it before continuing rather than discovering it in the
 browser.
 
@@ -2463,7 +2498,7 @@ browser.
 ```bash
 cd frontend && npm test && npm run build
 cd ../backend && uv run pytest -q && uv run ruff check .
-cd .. && docker compose up --build -d
+cd .. && docker compose up -d --build -V
 ```
 
 Expected: vitest green, build clean, backend 116 tests green, stack healthy.
