@@ -76,7 +76,7 @@ export function useAuth(): Auth {
  *  so this is a real check - but the server's 403 is still the enforcement. */
 export function RequireAdmin({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) return <p className="muted">Loading…</p>;
+  if (loading) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (!user || user.role !== "admin") return <Navigate to="/" replace />;
   return <>{children}</>;
 }

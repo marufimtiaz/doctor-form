@@ -103,9 +103,15 @@ autogenerate drift is silent until a column is missing in production.
 - **No self-service password reset.** There is no email or SMS channel, so a
   forgotten password needs an administrator.
 - **No audit log of sign-in attempts.**
-- **No frontend test runner**, and `npm run lint` is a scaffold stub — ESLint is
-  not installed. The frontend's real gate is `npm run build` (`tsc --noEmit` +
-  Vite). Adding vitest and ESLint would be a worthwhile next step.
+- **No component-render tests.** vitest covers the zod schemas only; there is
+  no `@testing-library/react`, so wiring bugs (a field not bound, a button not
+  submitting) are caught by hand. `npm run lint` is still a scaffold stub —
+  ESLint is not installed.
+- **Client validation duplicates the backend's rules.** The zod schemas in
+  `src/schemas/` restate what `backend/app/schemas/` enforces, so an agent sees
+  errors beside the field instead of after a round trip. The server remains the
+  authority; the vitest suite mirrors `test_survey_schemas.py` so drift fails a
+  test.
 - **No CI.** The backend suite is deliberately infrastructure-free — SQLite plus
   a local moto S3 server — so a CI job would be `pytest` with no services block.
 - **OCR is not implemented.** `ocr_status` is `pending` on every row, and
@@ -125,7 +131,10 @@ backend/          FastAPI app (SQLModel + asyncpg + boto3)
   app/services/   S3/RustFS storage helpers
   app/api/        routers: health, users, surveys, admin
   alembic/        migrations (Postgres only; tests use create_all on SQLite)
-frontend/         Vite + React + TypeScript
+frontend/         Vite + React + TypeScript + Tailwind v4 + shadcn/ui
+  src/components/ui/  shadcn primitives (generated; not hand-edited)
+  src/schemas/        zod schemas, mirroring backend/app/schemas
+  src/routes/         one file per screen
 caddy/Caddyfile   production reverse proxy + static SPA server
 ```
 
@@ -268,7 +277,7 @@ raw TCP. Hence the published port rather than an FQDN.
 
 ```bash
 cd backend && uv run pytest && uv run ruff check .   # SQLite + local moto S3; no stack needed
-cd frontend && npm run build   # runs tsc --noEmit first
+cd frontend && npm test && npm run build   # vitest schemas, then tsc + vite
 ```
 
 The backend suite needs no running services: it drives the app in-process over
