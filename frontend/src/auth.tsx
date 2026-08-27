@@ -15,7 +15,7 @@ import {
   setUnauthorizedHandler,
   TOKEN_KEY,
   type UserPublic,
-} from "./api";
+} from "@/api";
 
 interface Auth {
   user: UserPublic | null;

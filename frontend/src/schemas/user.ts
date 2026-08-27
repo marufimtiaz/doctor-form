@@ -10,7 +10,7 @@ export const createUserSchema = z.object({
   password: z
     .string()
     .min(PASSWORD_MIN, `Must be at least ${PASSWORD_MIN} characters.`)
-    .max(PASSWORD_MAX, `Must be at most ${PASSWORD_MAX} characters.`);
+    .max(PASSWORD_MAX, `Must be at most ${PASSWORD_MAX} characters.`),
 });
 
 export type CreateUserForm = z.infer<typeof createUserSchema>;

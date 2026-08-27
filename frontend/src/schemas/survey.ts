@@ -2,11 +2,17 @@ import { z } from "zod";
 
 /** Text inputs give strings; the API wants numbers. Coercing here keeps the
  *  form fields plain and the parsed output correctly typed. */
-const numeric = (message: string) =>
-  z.coerce.number({ invalid_type_error: message });
-
 const blankToUndefined = (value: unknown) =>
   typeof value === "string" && value.trim() === "" ? undefined : value;
+
+const numeric = (
+  message: string,
+  configure?: (schema: z.ZodNumber) => z.ZodNumber,
+) => {
+  let num = z.coerce.number({ invalid_type_error: message });
+  if (configure) num = configure(num);
+  return z.preprocess(blankToUndefined, num);
+};
 
 export const slotSchema = z
   .object({
@@ -41,15 +47,15 @@ export const surveySchema = z
         "Longitude must be between -180 and 180.",
       ),
 
-    daily_patients: numeric("Enter a number.")
-      .int()
-      .positive("Must be more than zero."),
-    avg_duration_min: numeric("Enter a number.")
-      .int()
-      .positive("Must be more than zero."),
-    consultation_fee_bdt: numeric("Enter a number.")
-      .int()
-      .min(0, "Cannot be negative."),
+    daily_patients: numeric("Enter a number.", (n) =>
+      n.int().positive("Must be more than zero."),
+    ),
+    avg_duration_min: numeric("Enter a number.", (n) =>
+      n.int().positive("Must be more than zero."),
+    ),
+    consultation_fee_bdt: numeric("Enter a number.", (n) =>
+      n.int().min(0, "Cannot be negative."),
+    ),
 
     slots: z.array(slotSchema).min(1, "Add at least one availability slot."),
     // useFieldArray needs objects, not bare strings.
@@ -108,7 +114,3 @@ export const emptySurveyValues = (): SurveyForm => ({
   slots: [emptySlot()],
   phones: [{ value: "" }],
 });
-
-// Referenced so the helper is not flagged unused; blank strings are handled
-// by the trims above rather than a preprocessor.
-void blankToUndefined;
