@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Tailwind v4's dark: variant defaults to @media (prefers-color-scheme).
+   The tokens below key off the .dark class, so without this the palette and
+   the dark: utilities inside the shadcn primitives are driven by two
+   different mechanisms. */
+@custom-variant dark (&:is(.dark *));
+
 :root {
   --radius: 0.5rem;
 
@@ -85,6 +91,14 @@
 }
 
 @layer base {
+  /* v4 preflight is `border:0 solid` - it sets the style but no colour, so a
+     bare `border` utility resolves to currentColor. Without this every Card,
+     Dialog, Alert, outline Button, TableRow and fieldset draws a near-black
+     hairline in light mode and a bright one in dark. */
+  * {
+    @apply border-border outline-ring/50;
+  }
+
   body {
     @apply bg-background text-foreground;
   }
