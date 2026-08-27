@@ -5,12 +5,15 @@ import { toast } from "sonner";
 
 import {
   adminStats,
+  correctDoctor,
   createUser,
   deleteSurvey,
   listAllSurveys,
   listUsers,
+  rereadNameplate,
   resetPassword,
   type AdminStats,
+  type DoctorFields,
   type Survey,
   type UserPublic,
 } from "@/api";
@@ -48,6 +51,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -56,6 +60,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { describePlace, describeSlot } from "@/lib/formatters";
 import { createUserSchema, type CreateUserForm } from "@/schemas/user";
 
@@ -70,6 +75,12 @@ export default function AdminPage() {
   const [agentId, setAgentId] = useState("");
   const [resetting, setResetting] = useState<UserPublic | null>(null);
   const [deleting, setDeleting] = useState<Survey | null>(null);
+  const [editingDoctor, setEditingDoctor] = useState<Survey | null>(null);
+  const [doctorDraft, setDoctorDraft] = useState<DoctorFields>({
+    doctor_name: "",
+    doctor_degrees: "",
+    doctor_specializations: "",
+  });
 
   const form = useForm<CreateUserForm>({
     resolver: zodResolver(createUserSchema),
@@ -130,6 +141,49 @@ export default function AdminPage() {
     }
   }
 
+  function ocrLabel(s: Survey) {
+    if (s.doctor_name) return s.doctor_name;
+    if (s.ocr_status === "failed") return "Could not read nameplate";
+    if (s.ocr_status === "processing") return "Reading nameplate…";
+    return "— nameplate pending";
+  }
+
+  function openDoctorEditor(s: Survey) {
+    setDoctorDraft({
+      doctor_name: s.doctor_name ?? "",
+      doctor_degrees: s.doctor_degrees ?? "",
+      doctor_specializations: s.doctor_specializations ?? "",
+    });
+    setEditingDoctor(s);
+  }
+
+  async function saveDoctor() {
+    if (!editingDoctor) return;
+    try {
+      // Blank means "the nameplate does not show this", which is null, not "".
+      await correctDoctor(editingDoctor.id, {
+        doctor_name: doctorDraft.doctor_name?.trim() || null,
+        doctor_degrees: doctorDraft.doctor_degrees?.trim() || null,
+        doctor_specializations: doctorDraft.doctor_specializations?.trim() || null,
+      });
+      toast.success("Doctor details updated.");
+      setEditingDoctor(null);
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function reread(s: Survey) {
+    try {
+      await rereadNameplate(s.id);
+      toast.success("Queued for another read.");
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   const filtered = district.trim() !== "" || agentId !== "";
 
   return (
@@ -156,67 +210,78 @@ export default function AdminPage() {
       )}
 
       {stats && stats.per_agent.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold tracking-tight">By agent</h2>
+        <section className="space-y-2">
+          <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Filter by agent
+          </div>
           <div className="flex flex-wrap gap-2">
+            <Button
+              variant={agentId === "" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setAgentId("")}
+            >
+              All agents ({stats.total})
+            </Button>
             {stats.per_agent.map((a) => (
               <Button
                 key={a.user_id}
                 variant={agentId === a.user_id ? "default" : "outline"}
                 size="sm"
-                onClick={() =>
-                  setAgentId(agentId === a.user_id ? "" : a.user_id)
-                }
+                onClick={() => setAgentId(a.user_id)}
               >
-                {a.name}
-                <Badge variant="secondary" className="ml-2">
-                  {a.today} / {a.total}
-                </Badge>
+                {a.name} ({a.total})
               </Button>
             ))}
           </div>
         </section>
       )}
 
-      <section className="flex flex-wrap items-center gap-2">
-        <Input
-          className="max-w-xs"
-          placeholder="Filter by district"
-          aria-label="Filter by district"
-          value={district}
-          onChange={(e) => setDistrict(e.target.value)}
-        />
-        {filtered && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setAgentId("");
-              setDistrict("");
-            }}
-          >
-            Clear
-          </Button>
-        )}
-      </section>
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            placeholder="Filter by district…"
+            value={district}
+            onChange={(e) => setDistrict(e.target.value)}
+            className="w-full sm:w-64"
+          />
+          {filtered && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setDistrict("");
+                setAgentId("");
+              }}
+            >
+              Clear filters
+            </Button>
+          )}
+        </div>
 
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold tracking-tight">Surveys</h2>
-        {loadError ? (
+        {loadError && (
           <Alert variant="destructive">
-            <AlertDescription className="flex flex-wrap items-center gap-2">
+            <AlertDescription className="flex items-center justify-between gap-2">
               <span>Could not load surveys: {loadError}</span>
-              <Button variant="outline" size="sm" onClick={() => void refresh()}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="bg-background"
+                onClick={() => void refresh()}
+              >
                 Retry
               </Button>
             </AlertDescription>
           </Alert>
-        ) : surveys.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing matches.</p>
-        ) : (
+        )}
+
+        {!loadError && surveys.length === 0 ? (
+          <Card>
+            <CardContent className="p-6 text-center text-sm text-muted-foreground">
+              {filtered ? "No surveys match the filters." : "No surveys filed yet."}
+            </CardContent>
+          </Card>
+        ) : !loadError && (
           <>
-            {/* Table at desk width, cards on a phone - the admin is usually
-                at a desk, but the roster should not be unusable on mobile. */}
             <div className="hidden md:block">
               <Table>
                 <TableHeader>
@@ -235,10 +300,28 @@ export default function AdminPage() {
                   {surveys.map((s) => (
                     <TableRow key={s.id}>
                       <TableCell>
-                        {s.doctor_name ?? (
-                          <span className="text-muted-foreground">
-                            — nameplate pending
-                          </span>
+                        <button
+                          className="text-left underline-offset-4 hover:underline"
+                          onClick={() => openDoctorEditor(s)}
+                        >
+                          {s.doctor_name ? (
+                            ocrLabel(s)
+                          ) : (
+                            <span className="text-muted-foreground">{ocrLabel(s)}</span>
+                          )}
+                        </button>
+                        {s.ocr_status === "failed" && s.ocr_error && (
+                          <p className="mt-1 text-xs text-destructive">{s.ocr_error}</p>
+                        )}
+                        {s.ocr_status !== "done" && (
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="h-auto p-0 text-xs"
+                            onClick={() => void reread(s)}
+                          >
+                            Re-read
+                          </Button>
                         )}
                       </TableCell>
                       <TableCell>{s.hospital_name}</TableCell>
@@ -287,9 +370,12 @@ export default function AdminPage() {
                   <Card>
                     <CardContent className="space-y-1 p-4 text-sm">
                       <div className="flex items-start justify-between gap-2">
-                        <span className="font-medium">
-                          {s.doctor_name ?? "Dr. — (nameplate pending)"}
-                        </span>
+                        <button
+                          className="text-left font-medium underline-offset-4 hover:underline"
+                          onClick={() => openDoctorEditor(s)}
+                        >
+                          {ocrLabel(s)}
+                        </button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -299,10 +385,6 @@ export default function AdminPage() {
                         </Button>
                       </div>
                       <div>{s.hospital_name}</div>
-                      <div className="text-muted-foreground">
-                        filed by {s.agent_name ?? "unknown"} ·{" "}
-                        {new Date(s.created_at).toLocaleString()}
-                      </div>
                       <div className="text-muted-foreground">
                         {describePlace(s)}
                       </div>
@@ -316,16 +398,21 @@ export default function AdminPage() {
                         {s.daily_patients}/day · {s.avg_duration_min} min · ৳
                         {s.consultation_fee_bdt}
                       </div>
-                      {s.nameplate_url && (
-                        <a
-                          className="text-primary underline underline-offset-4"
-                          href={s.nameplate_url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          View nameplate
-                        </a>
-                      )}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+                        <span className="text-muted-foreground">
+                          by {s.agent_name ?? "unknown"}
+                        </span>
+                        {s.nameplate_url && (
+                          <a
+                            className="text-primary underline underline-offset-4"
+                            href={s.nameplate_url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            View nameplate
+                          </a>
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
                 </li>
@@ -336,30 +423,31 @@ export default function AdminPage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold tracking-tight">People</h2>
-        <Card className="py-0">
+        <h2 className="text-lg font-semibold tracking-tight">Roster</h2>
+        <Card>
           <CardContent className="p-0">
-            <ul className="divide-y">
+            <div className="divide-y">
               {people.map((p) => (
-                <li
+                <div
                   key={p.id}
                   className="flex flex-wrap items-center gap-2 p-4 text-sm"
                 >
                   <span className="font-medium">{p.name}</span>
                   <span className="text-muted-foreground">{p.company}</span>
-                  <Badge variant="secondary">{p.role}</Badge>
-                  {!p.is_active && <Badge variant="outline">deactivated</Badge>}
+                  <Badge variant={p.role === "admin" ? "default" : "secondary"}>
+                    {p.role}
+                  </Badge>
                   <Button
-                    className="ml-auto"
-                    variant="outline"
+                    variant="link"
                     size="sm"
+                    className="ml-auto h-auto p-0"
                     onClick={() => setResetting(p)}
                   >
                     Reset password
                   </Button>
-                </li>
+                </div>
               ))}
-            </ul>
+            </div>
           </CardContent>
         </Card>
       </section>
@@ -367,7 +455,7 @@ export default function AdminPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold tracking-tight">Add an agent</h2>
         <Card>
-          <CardContent>
+          <CardContent className="pt-6">
             <Form {...form}>
               <form
                 onSubmit={form.handleSubmit(onAddAgent)}
@@ -418,22 +506,17 @@ export default function AdminPage() {
                   control={form.control}
                   name="password"
                   render={({ field }) => (
-                    <FormItem className="max-w-sm">
+                    <FormItem>
                       <FormLabel>Initial password</FormLabel>
                       <FormControl>
-                        <Input
-                          type="password"
-                          autoComplete="new-password"
-                          {...field}
-                        />
+                        <Input type="password" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Give this to the agent directly. They can change it from their
-                  own page.
+                  The agent changes this from their own page after sign-in.
                 </p>
                 <Button type="submit" disabled={form.formState.isSubmitting}>
                   Create agent
@@ -443,6 +526,72 @@ export default function AdminPage() {
           </CardContent>
         </Card>
       </section>
+
+      <Dialog
+        open={editingDoctor !== null}
+        onOpenChange={(open) => !open && setEditingDoctor(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Doctor details</DialogTitle>
+          </DialogHeader>
+          {editingDoctor?.nameplate_url && (
+            <a href={editingDoctor.nameplate_url} target="_blank" rel="noreferrer">
+              <img
+                src={editingDoctor.nameplate_url}
+                alt="Nameplate"
+                className="max-h-48 w-full rounded-md border object-contain"
+              />
+            </a>
+          )}
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="doctor-name">Name</Label>
+              <Input
+                id="doctor-name"
+                value={doctorDraft.doctor_name ?? ""}
+                onChange={(e) =>
+                  setDoctorDraft({ ...doctorDraft, doctor_name: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <Label htmlFor="doctor-degrees">Degrees</Label>
+              <Textarea
+                id="doctor-degrees"
+                rows={2}
+                value={doctorDraft.doctor_degrees ?? ""}
+                onChange={(e) =>
+                  setDoctorDraft({ ...doctorDraft, doctor_degrees: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <Label htmlFor="doctor-spec">Specializations</Label>
+              <Textarea
+                id="doctor-spec"
+                rows={2}
+                value={doctorDraft.doctor_specializations ?? ""}
+                onChange={(e) =>
+                  setDoctorDraft({
+                    ...doctorDraft,
+                    doctor_specializations: e.target.value,
+                  })
+                }
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={() => void saveDoctor()}>Save</Button>
+              <Button
+                variant="outline"
+                onClick={() => editingDoctor && void reread(editingDoctor)}
+              >
+                Re-read nameplate
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={resetting !== null}

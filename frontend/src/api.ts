@@ -25,7 +25,9 @@ export interface Survey {
   daily_patients: number;
   avg_duration_min: number;
   consultation_fee_bdt: number;
-  ocr_status: "pending" | "done" | "failed";
+  ocr_status: "pending" | "processing" | "done" | "failed";
+  ocr_attempts: number;
+  ocr_error: string | null;
   doctor_name: string | null;
   doctor_degrees: string | null;
   doctor_specializations: string | null;
@@ -151,3 +153,19 @@ export const adminStats = () => request<AdminStats>("/api/admin/stats");
 
 export const deleteSurvey = (id: string) =>
   request<void>(`/api/admin/surveys/${id}`, { method: "DELETE" });
+
+export interface DoctorFields {
+  doctor_name: string | null;
+  doctor_degrees: string | null;
+  doctor_specializations: string | null;
+}
+
+export const correctDoctor = (id: string, fields: DoctorFields) =>
+  request<Survey>(`/api/admin/surveys/${id}/doctor`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  });
+
+export const rereadNameplate = (id: string) =>
+  request<void>(`/api/admin/surveys/${id}/reread`, { method: "POST" });
