@@ -1,6 +1,10 @@
 import { LocateFixed } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import type { Control, UseFormSetValue } from "react-hook-form";
+import type {
+  Control,
+  UseFormGetValues,
+  UseFormSetValue,
+} from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,9 +20,11 @@ import type { SurveyForm } from "@/schemas/survey";
 export default function LocationInput({
   control,
   setValue,
+  getValues,
 }: {
   control: Control<SurveyForm>;
   setValue: UseFormSetValue<SurveyForm>;
+  getValues: UseFormGetValues<SurveyForm>;
 }) {
   const [geoState, setGeoState] = useState<"idle" | "asking" | "ok" | "denied">(
     "idle",
@@ -33,17 +39,26 @@ export default function LocationInput({
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setGeoState("ok");
-        // setValue rather than a controlled object: the agent may already be
-        // typing when this resolves, and only these two fields should move.
-        setValue("latitude", pos.coords.latitude.toFixed(6));
-        setValue("longitude", pos.coords.longitude.toFixed(6));
+        // The fix can arrive up to 10s after mount, by which time the agent
+        // may have typed coordinates by hand. Never overwrite their input.
+        // z.input makes these optional because of .default(""), so coalesce.
+        const { latitude = "", longitude = "" } = getValues();
+        if (latitude.trim() !== "" || longitude.trim() !== "") return;
+        // shouldValidate clears any "Provide coordinates or city and district."
+        // error raised by an earlier submit attempt.
+        setValue("latitude", pos.coords.latitude.toFixed(6), {
+          shouldValidate: true,
+        });
+        setValue("longitude", pos.coords.longitude.toFixed(6), {
+          shouldValidate: true,
+        });
       },
       // Denial is expected and must not block the form - city and district
       // satisfy the requirement on their own.
       () => setGeoState("denied"),
       { enableHighAccuracy: true, timeout: 10000 },
     );
-  }, [setValue]);
+  }, [setValue, getValues]);
 
   useEffect(() => {
     getGPS();

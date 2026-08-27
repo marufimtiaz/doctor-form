@@ -17,6 +17,7 @@ import NameplateInput from "@/components/NameplateInput";
 import ChangePasswordForm from "@/components/PasswordForm";
 import PhoneEditor from "@/components/PhoneEditor";
 import SlotEditor from "@/components/SlotEditor";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -45,8 +46,15 @@ export default function AgentPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [mine, setMine] = useState<Survey[]>([]);
   const [loading, setLoading] = useState(true);
+  // A failed load must not read as an empty list: an agent with 40 surveys
+  // being told they have none is worse than an error message.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [nameplate, setNameplate] = useState<File | null>(null);
   const [nameplateError, setNameplateError] = useState<string | null>(null);
+  // Remounts LocationInput after each submit so the next chamber gets its
+  // own GPS fix. Without the increment the key never changes, the effect runs
+  // once per page load, and an agent filing six surveys a day gets
+  // coordinates for the first one only.
   const [resetKey, setResetKey] = useState(0);
 
   const form = useForm<SurveyForm>({
@@ -59,8 +67,9 @@ export default function AgentPage() {
       const [s, list] = await Promise.all([myStats(), listMySurveys()]);
       setStats(s);
       setMine(list);
+      setLoadError(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      setLoadError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -98,6 +107,7 @@ export default function AgentPage() {
       await createSurvey(body);
       form.reset(emptySurveyValues());
       setNameplate(null);
+      setResetKey((n) => n + 1);
       setResetKey((k) => k + 1);
       toast.success("Survey submitted.");
       await refresh();
@@ -113,23 +123,32 @@ export default function AgentPage() {
           New chamber survey
         </h1>
         <div className="mt-4 grid grid-cols-2 gap-3">
-          {loading || !stats ? (
+          {loading ? (
             <>
               <Skeleton className="h-20" />
               <Skeleton className="h-20" />
             </>
+          ) : !stats ? (
+            <Alert variant="destructive" className="col-span-2">
+              <AlertDescription className="flex flex-wrap items-center gap-2">
+                <span>Could not load your counts.</span>
+                <Button variant="outline" size="sm" onClick={() => void refresh()}>
+                  Retry
+                </Button>
+              </AlertDescription>
+            </Alert>
           ) : (
             <>
-              <Card>
-                <CardContent className="p-4 text-center">
+              <Card className="py-4">
+                <CardContent className="text-center">
                   <div className="text-2xl font-semibold">{stats.today}</div>
                   <div className="text-xs text-muted-foreground">
                     filed today
                   </div>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="p-4 text-center">
+              <Card className="py-4">
+                <CardContent className="text-center">
                   <div className="text-2xl font-semibold">{stats.total}</div>
                   <div className="text-xs text-muted-foreground">in total</div>
                 </CardContent>
@@ -140,7 +159,7 @@ export default function AgentPage() {
       </section>
 
       <Card>
-        <CardContent className="pt-6">
+        <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
               <FormField
@@ -161,10 +180,16 @@ export default function AgentPage() {
                 key={resetKey}
                 control={form.control}
                 setValue={form.setValue}
+                getValues={form.getValues}
               />
               <NameplateInput
                 file={nameplate}
-                onChange={setNameplate}
+                onChange={(f) => {
+                  setNameplate(f);
+                  // Otherwise the destructive "required" text sits under a
+                  // perfectly valid image until the next submit attempt.
+                  if (f) setNameplateError(null);
+                }}
                 error={nameplateError}
               />
               <SlotEditor control={form.control} />
@@ -243,6 +268,15 @@ export default function AgentPage() {
         <h2 className="text-lg font-semibold tracking-tight">My surveys</h2>
         {loading ? (
           <Skeleton className="h-24 w-full" />
+        ) : loadError ? (
+          <Alert variant="destructive">
+            <AlertDescription className="flex flex-wrap items-center gap-2">
+              <span>Could not load your surveys: {loadError}</span>
+              <Button variant="outline" size="sm" onClick={() => void refresh()}>
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
         ) : mine.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nothing filed yet.</p>
         ) : (

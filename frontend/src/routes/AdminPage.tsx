@@ -25,6 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -62,6 +63,9 @@ export default function AdminPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [people, setPeople] = useState<UserPublic[]>([]);
+  // A failed load must not render as an empty result set: an admin
+  // filtering by district would conclude the filter matched nothing.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [district, setDistrict] = useState("");
   const [agentId, setAgentId] = useState("");
   const [resetting, setResetting] = useState<UserPublic | null>(null);
@@ -91,8 +95,9 @@ export default function AdminPage() {
       setStats(s);
       setSurveys(list);
       setPeople(roster);
+      setLoadError(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      setLoadError(err instanceof Error ? err.message : String(err));
     }
   }, [district, agentId]);
 
@@ -138,8 +143,8 @@ export default function AdminPage() {
             { value: stats.today, label: "today" },
             { value: stats.agent_count, label: "active users" },
           ].map((tile) => (
-            <Card key={tile.label}>
-              <CardContent className="p-4 text-center">
+            <Card key={tile.label} className="py-4">
+              <CardContent className="text-center">
                 <div className="text-2xl font-semibold">{tile.value}</div>
                 <div className="text-xs text-muted-foreground">
                   {tile.label}
@@ -197,7 +202,16 @@ export default function AdminPage() {
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold tracking-tight">Surveys</h2>
-        {surveys.length === 0 ? (
+        {loadError ? (
+          <Alert variant="destructive">
+            <AlertDescription className="flex flex-wrap items-center gap-2">
+              <span>Could not load surveys: {loadError}</span>
+              <Button variant="outline" size="sm" onClick={() => void refresh()}>
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : surveys.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nothing matches.</p>
         ) : (
           <>
@@ -211,7 +225,9 @@ export default function AdminPage() {
                     <TableHead>Hospital</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead>Agent</TableHead>
+                    <TableHead className="text-right">Throughput</TableHead>
                     <TableHead className="text-right">Fee</TableHead>
+                    <TableHead>Nameplate</TableHead>
                     <TableHead />
                   </TableRow>
                 </TableHeader>
@@ -230,8 +246,25 @@ export default function AdminPage() {
                         {describePlace(s)}
                       </TableCell>
                       <TableCell>{s.agent_name ?? "unknown"}</TableCell>
+                      <TableCell className="whitespace-nowrap text-right">
+                        {s.daily_patients}/day · {s.avg_duration_min} min
+                      </TableCell>
                       <TableCell className="text-right">
                         ৳{s.consultation_fee_bdt}
+                      </TableCell>
+                      <TableCell>
+                        {s.nameplate_url ? (
+                          <a
+                            className="text-primary underline underline-offset-4"
+                            href={s.nameplate_url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            View
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
@@ -279,6 +312,20 @@ export default function AdminPage() {
                       <div className="text-muted-foreground">
                         {s.phones.join(" · ")}
                       </div>
+                      <div className="text-muted-foreground">
+                        {s.daily_patients}/day · {s.avg_duration_min} min · ৳
+                        {s.consultation_fee_bdt}
+                      </div>
+                      {s.nameplate_url && (
+                        <a
+                          className="text-primary underline underline-offset-4"
+                          href={s.nameplate_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          View nameplate
+                        </a>
+                      )}
                     </CardContent>
                   </Card>
                 </li>
@@ -290,7 +337,7 @@ export default function AdminPage() {
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold tracking-tight">People</h2>
-        <Card>
+        <Card className="py-0">
           <CardContent className="p-0">
             <ul className="divide-y">
               {people.map((p) => (
@@ -320,7 +367,7 @@ export default function AdminPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold tracking-tight">Add an agent</h2>
         <Card>
-          <CardContent className="pt-6">
+          <CardContent>
             <Form {...form}>
               <form
                 onSubmit={form.handleSubmit(onAddAgent)}
