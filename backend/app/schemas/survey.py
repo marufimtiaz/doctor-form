@@ -90,6 +90,10 @@ class SurveyRead(BaseModel):
     avg_duration_min: int
     consultation_fee_bdt: int
     ocr_status: str
+    ocr_attempts: int = 0
+    # Why the last attempt failed, so the dashboard can explain rather than
+    # just report a failure.
+    ocr_error: str | None = None
     doctor_name: str | None
     doctor_degrees: str | None
     doctor_specializations: str | None
@@ -120,3 +124,11 @@ class AdminStatsRead(BaseModel):
     today: int
     agent_count: int
     per_agent: list[AgentStat]
+
+
+class DoctorFieldsUpdate(BaseModel):
+    """An admin correcting what the model read off the nameplate."""
+
+    doctor_name: str | None = Field(default=None, max_length=200)
+    doctor_degrees: str | None = Field(default=None, max_length=1000)
+    doctor_specializations: str | None = Field(default=None, max_length=1000)

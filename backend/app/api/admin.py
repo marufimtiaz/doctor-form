@@ -13,7 +13,12 @@ from app.core.timeutil import day_bounds_utc
 from app.db.session import SessionDep
 from app.models.survey import ChamberSurvey
 from app.models.user import User
-from app.schemas.survey import AdminStatsRead, AgentStat, SurveyRead
+from app.schemas.survey import (
+    AdminStatsRead,
+    AgentStat,
+    DoctorFieldsUpdate,
+    SurveyRead,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 settings = get_settings()
@@ -128,6 +133,48 @@ async def soft_delete_survey(survey_id: UUID, session: SessionDep, _: AdminUser)
     if row is None or row.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "survey not found")
     row.deleted_at = datetime.now(UTC)
+    row.updated_at = datetime.now(UTC)
+    session.add(row)
+    await session.commit()
+
+
+@router.patch("/surveys/{survey_id}/doctor", response_model=SurveyRead)
+async def correct_doctor_fields(
+    survey_id: UUID, payload: DoctorFieldsUpdate, session: SessionDep, _: AdminUser
+) -> SurveyRead:
+    """A human correction is authoritative: the row becomes `done` regardless
+    of what the model made of it."""
+    row = await session.get(ChamberSurvey, survey_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "survey not found")
+
+    row.doctor_name = payload.doctor_name
+    row.doctor_degrees = payload.doctor_degrees
+    row.doctor_specializations = payload.doctor_specializations
+    row.ocr_status = "done"
+    row.ocr_error = None
+    row.ocr_next_attempt_at = None
+    row.ocr_completed_at = datetime.now(UTC)
+    row.updated_at = datetime.now(UTC)
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return await survey_to_read(session, row)
+
+
+@router.post("/surveys/{survey_id}/reread", status_code=status.HTTP_204_NO_CONTENT)
+async def reread_nameplate(survey_id: UUID, session: SessionDep, _: AdminUser) -> None:
+    """Put the survey back in the queue. Attempts reset, so a row that gave up
+    after three failures gets a fresh three."""
+    row = await session.get(ChamberSurvey, survey_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "survey not found")
+
+    row.ocr_status = "pending"
+    row.ocr_attempts = 0
+    row.ocr_error = None
+    row.ocr_started_at = None
+    row.ocr_next_attempt_at = None
     row.updated_at = datetime.now(UTC)
     session.add(row)
     await session.commit()
