@@ -1,6 +1,6 @@
 import io
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from app.db.session import SessionLocal
@@ -110,26 +110,37 @@ async def test_stats_count_only_the_callers_surveys(client, make_user, s3):
     assert (await client.get("/api/surveys/stats", headers=auth(b))).json()["total"] == 2
 
 
-async def test_today_uses_the_dhaka_day_not_the_utc_day(client, make_user, s3):
-    """19:00Z on the 26th is 01:00 Dhaka on the 27th.
+async def test_today_is_bounded_by_the_dhaka_day_not_the_utc_day(client, make_user, s3):
+    """The daily count must flip exactly at Dhaka midnight.
 
-    Counted as a UTC day it would land on the 26th and every daily figure would
-    be off by six hours' worth of surveys.
+    Computed from the current Dhaka day rather than a fixed date: a hard-coded
+    timestamp silently changes meaning as the calendar advances, and a test
+    whose result depends on what day it is run is not a test.
     """
+    from app.core.config import get_settings
+    from app.core.timeutil import day_bounds_utc
+
     agent = await make_user()
     created = await client.post("/api/surveys", data=form(), files=nameplate(), headers=auth(agent))
-    survey_id = created.json()["id"]
+    survey_id = UUID(created.json()["id"])
+    start, _ = day_bounds_utc(get_settings().app_timezone)
 
-    async with SessionLocal() as session:
-        row = await session.get(ChamberSurvey, UUID(survey_id))
-        row.created_at = datetime(2026, 8, 26, 19, 0, tzinfo=UTC)
-        session.add(row)
-        await session.commit()
+    async def move_to(moment: datetime) -> dict:
+        async with SessionLocal() as session:
+            row = await session.get(ChamberSurvey, survey_id)
+            row.created_at = moment
+            session.add(row)
+            await session.commit()
+        return (await client.get("/api/surveys/stats", headers=auth(agent))).json()
 
-    stats = (await client.get("/api/surveys/stats", headers=auth(agent))).json()
-    assert stats["total"] == 1
-    # "Today" is the real today, and the row was backdated, so it is excluded.
-    assert stats["today"] == 0
+    just_before = await move_to(start - timedelta(seconds=1))
+    assert just_before == {"total": 1, "today": 0}
+
+    just_after = await move_to(start + timedelta(seconds=1))
+    assert just_after == {"total": 1, "today": 1}
+
+    # And the boundary really is six hours off the UTC day for Asia/Dhaka.
+    assert start.hour == 18
 
 
 async def test_unauthenticated_requests_are_rejected(client):

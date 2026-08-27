@@ -5,9 +5,13 @@ import {
   createUser,
   deleteSurvey,
   listAllSurveys,
+  listUsers,
+  resetPassword,
   type AdminStats,
   type Survey,
+  type UserPublic,
 } from "../api";
+import PasswordForm from "../components/PasswordForm";
 import { describePlace, describeSlot } from "./AgentPage";
 
 export default function AdminPage() {
@@ -20,15 +24,23 @@ export default function AdminPage() {
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newCompany, setNewCompany] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [people, setPeople] = useState<UserPublic[]>([]);
+  const [resetting, setResetting] = useState<UserPublic | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       const params: Record<string, string> = {};
       if (district.trim()) params.district = district.trim();
       if (agentId) params.user_id = agentId;
-      const [s, list] = await Promise.all([adminStats(), listAllSurveys(params)]);
+      const [s, list, roster] = await Promise.all([
+        adminStats(),
+        listAllSurveys(params),
+        listUsers(),
+      ]);
       setStats(s);
       setSurveys(list);
+      setPeople(roster);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -47,10 +59,12 @@ export default function AdminPage() {
         phone: newPhone,
         company: newCompany,
         role: "agent",
+        password: newPassword,
       });
       setNewName("");
       setNewPhone("");
       setNewCompany("");
+      setNewPassword("");
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -160,8 +174,56 @@ export default function AdminPage() {
             onChange={(e) => setNewCompany(e.target.value)}
           />
         </label>
+        <label>
+          Initial password
+          <input
+            required
+            type="password"
+            autoComplete="new-password"
+            minLength={8}
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+          />
+        </label>
+        <p className="muted">
+          Give this to the agent directly. They can change it from their own
+          page.
+        </p>
         <button type="submit">Create agent</button>
       </form>
+
+      <section>
+        <h2>People</h2>
+        <ul className="list">
+          {people.map((p) => (
+            <li key={p.id} className="card">
+              <div className="row">
+                <span>
+                  <strong>{p.name}</strong> · {p.company} · {p.role}
+                  {!p.is_active && <span className="muted"> · deactivated</span>}
+                </span>
+                <button
+                  className="link"
+                  onClick={() => setResetting(resetting?.id === p.id ? null : p)}
+                >
+                  {resetting?.id === p.id ? "Cancel" : "Reset password"}
+                </button>
+              </div>
+              {resetting?.id === p.id && (
+                <PasswordForm
+                  requireCurrent={false}
+                  submitLabel={`Set a new password for ${p.name}`}
+                  onSubmit={async (next) => {
+                    // Signs them out of every device, which is the point.
+                    await resetPassword(p.id, next);
+                    setResetting(null);
+                  }}
+                />
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <section>
         <h2>Surveys</h2>

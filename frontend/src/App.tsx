@@ -1,11 +1,12 @@
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 
-import { IdentityPicker, RequireAdmin, useIdentity } from "./auth";
+import { RequireAdmin, useAuth } from "./auth";
 import AdminPage from "./routes/AdminPage";
 import AgentPage from "./routes/AgentPage";
+import LoginPage from "./routes/LoginPage";
 
 function Header() {
-  const { user, clear } = useIdentity();
+  const { user, logout } = useAuth();
   if (!user) return null;
   return (
     <nav className="topbar">
@@ -15,8 +16,8 @@ function Header() {
       <span className="topbar-links">
         <Link to="/">Survey</Link>
         {user.role === "admin" && <Link to="/admin">Admin</Link>}
-        <button className="link" onClick={clear}>
-          Switch user
+        <button className="link" onClick={logout}>
+          Sign out
         </button>
       </span>
     </nav>
@@ -24,10 +25,10 @@ function Header() {
 }
 
 export default function App() {
-  const { user, loading } = useIdentity();
+  const { user, loading } = useAuth();
 
   if (loading) return <p className="muted">Loading…</p>;
-  if (!user) return <IdentityPicker />;
+  if (!user) return <LoginPage />;
 
   return (
     <>
