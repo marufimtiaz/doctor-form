@@ -189,6 +189,8 @@ requires an `Authorization: Bearer <token>` header.
 | `GET`    | `/api/admin/surveys`        | admin   | Filter by `user_id`, `district`, `date_from`/`date_to`, `include_deleted` |
 | `GET`    | `/api/admin/stats`          | admin   | Totals plus a per-agent breakdown          |
 | `DELETE` | `/api/admin/surveys/{id}`   | admin   | **Soft** — sets `deleted_at`, keeps the object |
+| `PATCH`  | `/api/admin/surveys/{id}/doctor` | admin | Human correction of model extraction |
+| `POST`   | `/api/admin/surveys/{id}/reread` | admin | Resets attempts and re-queues OCR |
 
 `slots` and `phones` are sent as JSON-encoded strings inside the multipart body,
 because multipart cannot nest and the nameplate must ride in the same request.
@@ -196,6 +198,22 @@ because multipart cannot nest and the nameplate must ride in the same request.
 Date filters and daily counts are both computed in `APP_TIMEZONE`, not UTC.
 
 Nameplates are stored in RustFS and returned as **presigned URLs** (1h default).
+
+## Nameplate OCR
+
+Doctor name, degrees, and specializations are extracted from uploaded nameplate photos using **OpenRouter** and `google/gemma-4-31b-it`.
+
+### Modes (`OCR_MODE`)
+
+- `worker` (default): A background loop inside the API container polls for `pending` surveys, claims them using `SELECT FOR UPDATE SKIP LOCKED`, downloads image bytes, and calls OpenRouter.
+- `inline`: Runs directly inside the `POST /api/surveys` handler after DB commit. If extraction fails, the survey remains filed with `ocr_status="pending"` (no submitted survey is ever lost).
+- `off`: Disables in-process extraction. Useful when running the worker in a separate container (detached worker pattern).
+
+### Detached Worker
+
+To run the worker separately from the API:
+1. Set `OCR_MODE=off` on the main backend service.
+2. Run a separate container using `python -m app.workers.ocr` with `OCR_MODE=worker` and `OPENROUTER_API_KEY` set. See `docker-compose.prod.yml` for the commented block.
 
 ## Deploying to Coolify
 
@@ -254,6 +272,14 @@ Backend settings (env vars, see `backend/app/core/config.py`):
 | `ACCESS_TOKEN_TTL_DAYS`  | `30`                             | Token lifetime                   |
 | `ADMIN_PASSWORD`         | *(dev default; boot fails in prod)* | Seeded admin's password      |
 | `DEMO_PASSWORD`          | `demo-password`                  | Demo agents' password (dev only) |
+| `OCR_MODE`               | `worker`                         | Extraction execution mode: `worker`, `inline`, `off` |
+| `OPENROUTER_API_KEY`     | *(empty)*                        | OpenRouter API key for LLM OCR extraction |
+| `OCR_MODEL`              | `google/gemma-4-31b-it`          | Model ID used for vision extraction |
+| `OCR_POLL_SECONDS`       | `10`                             | Worker polling frequency in seconds |
+| `OCR_BATCH_SIZE`         | `5`                              | Max surveys claimed per worker pass |
+| `OCR_MAX_ATTEMPTS`       | `3`                              | Fail threshold before `ocr_status="failed"` |
+| `OCR_TIMEOUT_SECONDS`    | `60`                             | OpenRouter request timeout in seconds |
+| `OCR_STALE_MINUTES`      | `15`                             | Reaper threshold for crashed claims |
 
 ### Connecting a GUI
 

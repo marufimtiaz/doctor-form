@@ -78,11 +78,41 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       ACCESS_TOKEN_TTL_DAYS: ${ACCESS_TOKEN_TTL_DAYS:-30}
+      OCR_MODE: ${OCR_MODE:-worker}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OCR_MODEL: ${OCR_MODEL:-google/gemma-4-31b-it}
+      OCR_POLL_SECONDS: ${OCR_POLL_SECONDS:-10}
+      OCR_BATCH_SIZE: ${OCR_BATCH_SIZE:-5}
+      OCR_MAX_ATTEMPTS: ${OCR_MAX_ATTEMPTS:-3}
+      OCR_TIMEOUT_SECONDS: ${OCR_TIMEOUT_SECONDS:-60}
+      OCR_STALE_MINUTES: ${OCR_STALE_MINUTES:-15}
     expose:
       - "8000"
     depends_on:
       - postgres
       - rustfs
+
+  # To run the worker in its own container, set OCR_MODE=off on the backend service,
+  # uncomment this block, and set OCR_MODE=worker on this service.
+  #
+  # ocr-worker:
+  #   build:
+  #     context: ./backend
+  #   restart: unless-stopped
+  #   command: ["python", "-m", "app.workers.ocr"]
+  #   environment:
+  #     DEBUG: "false"
+  #     DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-app}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-app}
+  #     S3_ENDPOINT_URL: http://rustfs:9000
+  #     S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+  #     S3_SECRET_KEY: ${SERVICE_PASSWORD_RUSTFS}
+  #     S3_BUCKET: ${S3_BUCKET:-uploads}
+  #     OCR_MODE: worker
+  #     OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+  #     OCR_MODEL: ${OCR_MODEL:-google/gemma-4-31b-it}
+  #   depends_on:
+  #     - postgres
+  #     - rustfs
 
   frontend:
     build:
