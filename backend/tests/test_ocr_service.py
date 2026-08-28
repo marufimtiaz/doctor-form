@@ -128,3 +128,21 @@ async def test_the_image_is_sent_inline_as_a_data_uri():
     image_part = next(p for p in parts if p["type"] == "image_url")
     assert image_part["image_url"]["url"].startswith("data:image/jpeg;base64,")
     assert "localhost" not in image_part["image_url"]["url"]
+
+
+async def test_doctor_name_truncates_at_200_chars():
+    long_name = "Dr. " + ("A" * 300)
+    body = f'{{"doctor_name": "{long_name}"}}'
+    async with reply(body) as client:
+        fields = await extract_doctor_fields(IMAGE, "image/jpeg", client=client)
+    assert fields.doctor_name is not None
+    assert len(fields.doctor_name) == 200
+
+
+async def test_null_content_raises_ocr_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": [{"message": {"content": None}}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(OcrError, match="model returned no content"):
+            await extract_doctor_fields(IMAGE, "image/jpeg", client=client)

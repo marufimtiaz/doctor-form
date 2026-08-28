@@ -77,6 +77,21 @@ def delete_object(key: str) -> None:
     get_s3_client().delete_object(Bucket=settings.s3_bucket, Key=key)
 
 
+def sniff_image_type(data: bytes, fallback: str | None = None) -> str:
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith(b"RIFF") and len(data) >= 12 and data[8:12] == b"WEBP":
+        return "image/webp"
+    if data.startswith(b"GIF87a") or data.startswith(b"GIF89a"):
+        return "image/gif"
+
+    if fallback and fallback != "application/octet-stream":
+        return fallback
+    return "image/jpeg"
+
+
 def download_object(key: str) -> tuple[bytes, str]:
     """Fetch an object's bytes and its stored content type.
 
@@ -86,5 +101,7 @@ def download_object(key: str) -> tuple[bytes, str]:
     """
     settings = get_settings()
     resp = get_s3_client().get_object(Bucket=settings.s3_bucket, Key=key)
-    content_type = resp.get("ContentType") or "application/octet-stream"
-    return resp["Body"].read(), content_type
+    raw_type = resp.get("ContentType") or "application/octet-stream"
+    content = resp["Body"].read()
+    content_type = sniff_image_type(content, raw_type)
+    return content, content_type

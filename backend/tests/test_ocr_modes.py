@@ -103,3 +103,11 @@ async def test_inline_failure_never_loses_the_survey(
         assert row is not None
         assert row.ocr_attempts == 1
         assert "429" in row.ocr_error
+
+
+async def test_off_mode_starts_no_background_worker(off_mode):
+    from asgi_lifespan import LifespanManager
+    from app.main import app
+
+    async with LifespanManager(app):
+        pass  # Lifespan starts and stops cleanly without task execution

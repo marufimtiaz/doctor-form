@@ -145,12 +145,12 @@ async def correct_doctor_fields(
     """A human correction is authoritative: the row becomes `done` regardless
     of what the model made of it."""
     row = await session.get(ChamberSurvey, survey_id)
-    if row is None:
+    if row is None or row.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "survey not found")
 
-    row.doctor_name = payload.doctor_name
-    row.doctor_degrees = payload.doctor_degrees
-    row.doctor_specializations = payload.doctor_specializations
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
+
     row.ocr_status = "done"
     row.ocr_error = None
     row.ocr_next_attempt_at = None
@@ -167,7 +167,7 @@ async def reread_nameplate(survey_id: UUID, session: SessionDep, _: AdminUser) -
     """Put the survey back in the queue. Attempts reset, so a row that gave up
     after three failures gets a fresh three."""
     row = await session.get(ChamberSurvey, survey_id)
-    if row is None:
+    if row is None or row.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "survey not found")
 
     row.ocr_status = "pending"
@@ -175,6 +175,12 @@ async def reread_nameplate(survey_id: UUID, session: SessionDep, _: AdminUser) -
     row.ocr_error = None
     row.ocr_started_at = None
     row.ocr_next_attempt_at = None
+    row.ocr_completed_at = None
     row.updated_at = datetime.now(UTC)
     session.add(row)
     await session.commit()
+
+    if settings.ocr_mode == "inline":
+        from app.workers.ocr import process_survey
+
+        await process_survey(row.id)

@@ -120,3 +120,27 @@ async def test_admin_listing_exposes_attempts_and_error(client, make_user, filed
     (row,) = [r for r in resp.json() if r["id"] == filed]
     assert row["ocr_attempts"] == 3
     assert row["ocr_error"] == "OpenRouter returned 429"
+
+
+async def test_patch_with_one_field_leaves_others_intact(client, make_user, filed):
+    from uuid import UUID
+
+    admin = await make_user(role="admin", name="Boss")
+    async with SessionLocal() as session:
+        row = await session.get(ChamberSurvey, UUID(filed))
+        row.doctor_name = "Initial Name"
+        row.doctor_degrees = "MBBS"
+        row.doctor_specializations = "Cardiology"
+        session.add(row)
+        await session.commit()
+
+    resp = await client.patch(
+        f"/api/admin/surveys/{filed}/doctor",
+        json={"doctor_name": "Updated Name"},
+        headers=auth(admin),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["doctor_name"] == "Updated Name"
+    assert body["doctor_degrees"] == "MBBS"
+    assert body["doctor_specializations"] == "Cardiology"

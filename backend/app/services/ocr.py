@@ -35,15 +35,16 @@ Rules:
 - The text may be Bangla, English, or both. Transcribe it as printed.
 - No commentary, no explanation, no markdown."""
 
+NAME_MAX, TEXT_MAX = 200, 1000
+
 _FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.S)
 _OBJECT = re.compile(r"\{.*\}", re.S)
 
 
-def _blank_to_none(value: str | None) -> str | None:
+def _clean(value: str | None, limit: int) -> str | None:
     if value is None:
         return None
-    stripped = value.strip()
-    return stripped or None
+    return value.strip()[:limit] or None
 
 
 def _parse(content: str) -> DoctorFields:
@@ -73,9 +74,9 @@ def _parse(content: str) -> DoctorFields:
         raise OcrError(f"could not parse model output: {exc}") from exc
 
     return DoctorFields(
-        doctor_name=_blank_to_none(fields.doctor_name),
-        doctor_degrees=_blank_to_none(fields.doctor_degrees),
-        doctor_specializations=_blank_to_none(fields.doctor_specializations),
+        doctor_name=_clean(fields.doctor_name, NAME_MAX),
+        doctor_degrees=_clean(fields.doctor_degrees, TEXT_MAX),
+        doctor_specializations=_clean(fields.doctor_specializations, TEXT_MAX),
     )
 
 
@@ -115,8 +116,13 @@ async def _ask(client: httpx.AsyncClient, payload: dict) -> str:
         raise OcrError(f"OpenRouter returned {resp.status_code}: {resp.text[:200]}")
 
     try:
-        return resp.json()["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, ValueError) as exc:
+        content = resp.json()["choices"][0]["message"].get("content")
+        if not content:
+            raise OcrError("model returned no content")
+        return content
+    except (KeyError, IndexError, ValueError, AttributeError) as exc:
+        if isinstance(exc, OcrError):
+            raise
         raise OcrError(f"unexpected OpenRouter response shape: {exc}") from exc
 
 

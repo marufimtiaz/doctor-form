@@ -6,6 +6,7 @@ from uuid import uuid4
 from moto.server import ThreadedMotoServer
 
 # Must be set before app.core.config is imported, since Settings is cached.
+os.environ["OCR_MODE"] = "off"
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./test.db")
 os.environ.setdefault("S3_BOOTSTRAP", "false")
 # The startup guard refuses insecure defaults whenever debug is false, and the

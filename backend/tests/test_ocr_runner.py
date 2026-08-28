@@ -178,3 +178,87 @@ async def test_backoff_hides_a_row_until_its_time(survey):
 
     async with SessionLocal() as session:
         assert await claim_pending(session, 5) == []
+
+
+async def test_reaper_increments_attempts_and_gives_up_at_max(survey):
+    from app.core.config import get_settings
+
+    # Set row as processing with attempts = max_attempts - 1
+    max_attempts = get_settings().ocr_max_attempts
+    async with SessionLocal() as session:
+        row = await session.get(ChamberSurvey, survey.id)
+        row.ocr_status = "processing"
+        row.ocr_attempts = max_attempts - 1
+        row.ocr_started_at = datetime.now(UTC) - timedelta(hours=2)
+        session.add(row)
+        await session.commit()
+
+    async with SessionLocal() as session:
+        assert await reap_stale(session) == 1
+
+    row = await _reload(survey.id)
+    assert row.ocr_status == "failed"
+    assert row.ocr_attempts == max_attempts
+    assert "repeatedly stalled" in row.ocr_error
+
+
+async def test_midflight_status_change_prevents_writeback(survey):
+    async with SessionLocal() as session:
+        row = await session.get(ChamberSurvey, survey.id)
+        row.ocr_status = "processing"
+        session.add(row)
+        await session.commit()
+
+    # While OCR runs, an admin corrects the row
+    async with SessionLocal() as session:
+        row = await session.get(ChamberSurvey, survey.id)
+        row.ocr_status = "done"
+        row.doctor_name = "Admin Corrected"
+        session.add(row)
+        await session.commit()
+
+    async with reply(GOOD) as client:
+        await process_survey(survey.id, client=client)
+
+    row = await _reload(survey.id)
+    assert row.doctor_name == "Admin Corrected"
+    assert row.ocr_status == "done"
+
+
+async def test_process_survey_handles_save_failure_gracefully(survey, monkeypatch):
+    async with SessionLocal() as session:
+        row = await session.get(ChamberSurvey, survey.id)
+        row.ocr_status = "processing"
+        session.add(row)
+        await session.commit()
+
+    calls = 0
+
+    class FailingSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def get(self, model, id):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                # Call 2 is the success write-back attempt: fail commit
+                raise RuntimeError("DB write error")
+            # Call 1 (initial fetch) and Call 3 (failure recording): work normally
+            async with SessionLocal() as real:
+                return await real.get(model, id)
+
+        def add(self, instance):
+            pass
+
+        async def commit(self):
+            pass
+
+    monkeypatch.setattr("app.workers.ocr.SessionLocal", FailingSession)
+
+    async with reply(GOOD) as client:
+        # Should not raise exception out of process_survey
+        await process_survey(survey.id, client=client)

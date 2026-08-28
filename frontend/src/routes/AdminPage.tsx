@@ -229,7 +229,7 @@ export default function AdminPage() {
                 size="sm"
                 onClick={() => setAgentId(a.user_id)}
               >
-                {a.name} ({a.total})
+                {a.name} ({a.today} today / {a.total} total)
               </Button>
             ))}
           </div>
@@ -400,7 +400,8 @@ export default function AdminPage() {
                       </div>
                       <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
                         <span className="text-muted-foreground">
-                          by {s.agent_name ?? "unknown"}
+                          by {s.agent_name ?? "unknown"} ·{" "}
+                          <time>{new Date(s.created_at).toLocaleString()}</time>
                         </span>
                         {s.nameplate_url && (
                           <a
@@ -437,6 +438,9 @@ export default function AdminPage() {
                   <Badge variant={p.role === "admin" ? "default" : "secondary"}>
                     {p.role}
                   </Badge>
+                  {!p.is_active && (
+                    <Badge variant="destructive">Deactivated</Badge>
+                  )}
                   <Button
                     variant="link"
                     size="sm"
@@ -509,7 +513,7 @@ export default function AdminPage() {
                     <FormItem>
                       <FormLabel>Initial password</FormLabel>
                       <FormControl>
-                        <Input type="password" {...field} />
+                        <Input type="password" autoComplete="new-password" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

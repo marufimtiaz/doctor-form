@@ -314,6 +314,18 @@ this app always points boto3 at a custom `endpoint_url`.
 
 `npm run lint` is a scaffold stub — ESLint is not installed. See Known gaps.
 
+## Database Migrations
+
+Schema migrations are managed by Alembic. When creating new migrations, pass `--rev-id` at generation time so the generated revision ID matches your revision naming scheme:
+
+```bash
+uv run alembic revision --autogenerate -m "description" --rev-id 0004
+```
+
+Setting `--rev-id` at generation time ensures an applied revision never has a name that changes after generation.
+
+*Note:* The main backend API container runs database migrations on startup (`alembic upgrade head` in `lifespan`). When running detached worker instances, ensure the API container boots first to run migrations, as the detached worker entrypoint (`python -m app.workers.ocr`) does not invoke `init_db()`.
+
 ## Notes on scaling
 
 The backend is stateless, so it scales horizontally behind Caddy; Postgres holds

@@ -55,13 +55,14 @@ async def claim_pending(session: AsyncSession, limit: int) -> list[UUID]:
 async def _record_failure(survey_id: UUID, message: str) -> None:
     async with SessionLocal() as session:
         row = await session.get(ChamberSurvey, survey_id)
-        if row is None:
+        if row is None or row.ocr_status != "processing":
             return
         row.ocr_attempts += 1
         row.ocr_error = message[:ERROR_MAX]
         row.updated_at = datetime.now(UTC)
         if row.ocr_attempts >= settings.ocr_max_attempts:
             row.ocr_status = "failed"
+            row.ocr_next_attempt_at = None
         else:
             row.ocr_status = "pending"
             # Exponential backoff: 1, 2, 4 minutes.
@@ -78,9 +79,13 @@ async def process_survey(
     data on the row, not an exception for the caller to handle."""
     async with SessionLocal() as session:
         row = await session.get(ChamberSurvey, survey_id)
-        if row is None:
+        if row is None or row.ocr_status not in ("pending", "processing"):
             return
+        row.ocr_status = "processing"
+        row.ocr_started_at = datetime.now(UTC)
         key = row.nameplate_key
+        session.add(row)
+        await session.commit()
 
     try:
         image, content_type = await asyncio.to_thread(storage.download_object, key)
@@ -94,20 +99,24 @@ async def process_survey(
         await _record_failure(survey_id, f"{type(exc).__name__}: {exc}")
         return
 
-    async with SessionLocal() as session:
-        row = await session.get(ChamberSurvey, survey_id)
-        if row is None:
-            return
-        row.doctor_name = fields.doctor_name
-        row.doctor_degrees = fields.doctor_degrees
-        row.doctor_specializations = fields.doctor_specializations
-        row.ocr_status = "done"
-        row.ocr_error = None
-        row.ocr_next_attempt_at = None
-        row.ocr_completed_at = datetime.now(UTC)
-        row.updated_at = datetime.now(UTC)
-        session.add(row)
-        await session.commit()
+    try:
+        async with SessionLocal() as session:
+            row = await session.get(ChamberSurvey, survey_id)
+            if row is None or row.ocr_status != "processing":
+                return
+            row.doctor_name = fields.doctor_name
+            row.doctor_degrees = fields.doctor_degrees
+            row.doctor_specializations = fields.doctor_specializations
+            row.ocr_status = "done"
+            row.ocr_error = None
+            row.ocr_next_attempt_at = None
+            row.ocr_completed_at = datetime.now(UTC)
+            row.updated_at = datetime.now(UTC)
+            session.add(row)
+            await session.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("could not save OCR result for %s", survey_id)
+        await _record_failure(survey_id, f"could not save result: {exc}")
 
 
 async def reap_stale(session: AsyncSession) -> int:
@@ -126,8 +135,17 @@ async def reap_stale(session: AsyncSession) -> int:
         )
     ).all()
     for row in rows:
-        row.ocr_status = "pending"
+        row.ocr_attempts += 1
         row.ocr_started_at = None
+        row.updated_at = datetime.now(UTC)
+        if row.ocr_attempts >= settings.ocr_max_attempts:
+            row.ocr_status = "failed"
+            row.ocr_error = "extraction repeatedly stalled; giving up"
+            row.ocr_next_attempt_at = None
+        else:
+            row.ocr_status = "pending"
+            delay = 2 ** (row.ocr_attempts - 1)
+            row.ocr_next_attempt_at = datetime.now(UTC) + timedelta(minutes=delay)
         session.add(row)
     await session.commit()
     return len(rows)
@@ -165,4 +183,7 @@ async def run_worker_forever() -> None:
 if __name__ == "__main__":
     # Detached mode: run this as its own container with OCR_MODE=off on the API.
     logging.basicConfig(level=logging.INFO)
+    if not settings.openrouter_api_key:
+        logger.error("OPENROUTER_API_KEY is required for the detached worker")
+        raise SystemExit(1)
     asyncio.run(run_worker_forever())

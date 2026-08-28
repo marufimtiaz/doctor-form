@@ -5,7 +5,8 @@ import pytest
 from app.core.config import Settings
 
 
-def test_ocr_mode_defaults_to_worker():
+def test_ocr_mode_defaults_to_worker(monkeypatch):
+    monkeypatch.delenv("OCR_MODE", raising=False)
     assert Settings(_env_file=None).ocr_mode == "worker"
 
 
