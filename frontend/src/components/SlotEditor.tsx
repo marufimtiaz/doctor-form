@@ -425,28 +425,13 @@ export default function SlotEditor({
               )}
             />
 
-            {/* Mobile Responsive Timeline Track & Handle Pair Button */}
+            {/* Perfect Alignment Timeline Track Container */}
             <div className="space-y-2 rounded-md bg-muted/40 p-2.5 sm:p-3">
-              <div className="flex items-center justify-between gap-2">
-                {/* Desktop Labels (8 labels) */}
-                <div className="hidden sm:flex justify-between text-[10px] font-medium text-muted-foreground flex-1 pr-4">
-                  <span>8 AM</span>
-                  <span>10 AM</span>
-                  <span>12 PM</span>
-                  <span>2 PM</span>
-                  <span>4 PM</span>
-                  <span>6 PM</span>
-                  <span>8 PM</span>
-                  <span>10 PM</span>
-                </div>
-                {/* Mobile Milestone Labels (4 labels) */}
-                <div className="flex sm:hidden justify-between text-[10px] font-medium text-muted-foreground flex-1 pr-2">
-                  <span>8 AM</span>
-                  <span>1 PM</span>
-                  <span>6 PM</span>
-                  <span>11 PM</span>
-                </div>
-                {/* Handle Pair Button */}
+              {/* Header Row with Title & Handle Pair Button */}
+              <div className="flex items-center justify-between gap-2 border-b border-muted pb-1.5">
+                <span className="text-[11px] font-semibold text-muted-foreground">
+                  Timeline Track (8 AM – 11 PM)
+                </span>
                 <Button
                   type="button"
                   variant="secondary"
@@ -466,11 +451,24 @@ export default function SlotEditor({
                 </Button>
               </div>
 
+              {/* Time Labels Spanning 100% Full Width of Track */}
+              <div className="flex justify-between text-[10px] font-medium text-muted-foreground w-full px-0.5">
+                <span>8 AM</span>
+                <span className="hidden sm:inline">10 AM</span>
+                <span>12 PM</span>
+                <span className="hidden sm:inline">2 PM</span>
+                <span>4 PM</span>
+                <span className="hidden sm:inline">6 PM</span>
+                <span>8 PM</span>
+                <span>11 PM</span>
+              </div>
+
+              {/* Timeline Track Spanning 100% Full Width */}
               <div
                 ref={(el) => {
                   timelineRefs.current[index] = el;
                 }}
-                className="relative h-6 w-full rounded-full bg-muted border select-none my-1 touch-none"
+                className="relative h-6 w-full rounded-full bg-muted border select-none touch-none"
               >
                 {/* 30-min tick marks */}
                 {Array.from({ length: 31 }).map((_, i) => (
@@ -485,7 +483,7 @@ export default function SlotEditor({
                   />
                 ))}
 
-                {/* Color-Coded Segments & Touch-Friendly Draggable Knobs */}
+                {/* Color-Coded Segments & Handle Knobs */}
                 {currentRanges.map((range, rIdx) => {
                   const left = timeToPercent(range.start_time);
                   const right = timeToPercent(range.end_time);
@@ -503,26 +501,26 @@ export default function SlotEditor({
                       }`}
                       style={{ left: `${left}%`, width: `${width}%` }}
                     >
-                      {/* Left Drag Handle (Start Time Knob with touch-none) */}
+                      {/* Left Drag Handle (Start Time Knob) */}
                       <div
                         onPointerDown={(e) =>
                           handlePointerDrag(e, index, rIdx, "start_time")
                         }
-                        className="absolute -left-3 top-1/2 -translate-y-1/2 w-5 h-7 bg-background border-2 border-primary rounded-full shadow-md cursor-ew-resize hover:scale-110 active:scale-125 z-20 flex items-center justify-center touch-none"
+                        className="absolute -left-2.5 top-1/2 -translate-y-1/2 w-4 h-7 bg-background border-2 border-primary rounded-md shadow-md cursor-ew-resize hover:scale-110 active:scale-125 z-20 flex items-center justify-center touch-none"
                         title={`Drag Start Time (${range.start_time})`}
                       >
-                        <div className="w-0.5 h-2.5 bg-muted-foreground/80 rounded-full" />
+                        <div className="w-0.5 h-3 bg-primary/80 rounded-full" />
                       </div>
 
-                      {/* Right Drag Handle (End Time Knob with touch-none) */}
+                      {/* Right Drag Handle (End Time Knob) */}
                       <div
                         onPointerDown={(e) =>
                           handlePointerDrag(e, index, rIdx, "end_time")
                         }
-                        className="absolute -right-3 top-1/2 -translate-y-1/2 w-5 h-7 bg-background border-2 border-primary rounded-full shadow-md cursor-ew-resize hover:scale-110 active:scale-125 z-20 flex items-center justify-center touch-none"
+                        className="absolute -right-2.5 top-1/2 -translate-y-1/2 w-4 h-7 bg-background border-2 border-primary rounded-full shadow-md cursor-ew-resize hover:scale-110 active:scale-125 z-20 flex items-center justify-center touch-none"
                         title={`Drag End Time (${range.end_time})`}
                       >
-                        <div className="w-0.5 h-2.5 bg-muted-foreground/80 rounded-full" />
+                        <div className="w-0.5 h-3 bg-primary/80 rounded-full" />
                       </div>
                     </div>
                   );
@@ -540,7 +538,7 @@ export default function SlotEditor({
               </Alert>
             )}
 
-            {/* Time Ranges List */}
+            {/* Time Ranges List with Clean Input-Group Controls */}
             <div className="space-y-3">
               <span className="text-xs font-medium text-muted-foreground">
                 Time Shift Ranges:
@@ -562,21 +560,21 @@ export default function SlotEditor({
                       setHoveredShift({ groupIndex: index, rangeIndex })
                     }
                     onMouseLeave={() => setHoveredShift(null)}
-                    className={`flex flex-wrap items-center gap-2 rounded-md border p-2 sm:p-2.5 bg-card transition-all border-l-4 ${colors.border} ${
+                    className={`flex flex-wrap items-center gap-2 rounded-md border p-2.5 bg-card transition-all border-l-4 ${colors.border} ${
                       isHovered ? "ring-2 ring-primary/40 shadow-sm" : ""
                     }`}
                   >
-                    <span className="text-xs font-bold min-w-14 sm:min-w-16">
+                    <span className="text-xs font-bold min-w-14">
                       Shift {rangeIndex + 1}:
                     </span>
 
-                    {/* Start Time Select & Nudge Buttons */}
-                    <div className="flex items-center gap-0.5 sm:gap-1">
+                    {/* Joined Start Time Control Group */}
+                    <div className="inline-flex items-center rounded-md border bg-background text-xs shadow-2xs">
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-6 text-xs text-muted-foreground"
+                        className="h-8 w-7 rounded-r-none border-r text-xs text-muted-foreground hover:bg-muted"
                         title="Minus 30 mins"
                         onClick={() => nudgeTime(index, rangeIndex, "start_time", -30)}
                       >
@@ -586,13 +584,13 @@ export default function SlotEditor({
                         control={control}
                         name={`slots.${index}.ranges.${rangeIndex}.start_time`}
                         render={({ field: start }) => (
-                          <FormItem className="min-w-28 sm:min-w-32">
+                          <FormItem className="m-0">
                             <Select
                               value={start.value}
                               onValueChange={start.onChange}
                             >
                               <FormControl>
-                                <SelectTrigger className="h-8 text-xs font-medium">
+                                <SelectTrigger className="h-8 border-0 shadow-none rounded-none text-xs font-medium focus:ring-0 w-28">
                                   <SelectValue placeholder="Start Time" />
                                 </SelectTrigger>
                               </FormControl>
@@ -615,7 +613,7 @@ export default function SlotEditor({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-6 text-xs text-muted-foreground"
+                        className="h-8 w-7 rounded-l-none border-l text-xs text-muted-foreground hover:bg-muted"
                         title="Plus 30 mins"
                         onClick={() => nudgeTime(index, rangeIndex, "start_time", 30)}
                       >
@@ -625,13 +623,13 @@ export default function SlotEditor({
 
                     <span className="text-xs font-medium text-muted-foreground">to</span>
 
-                    {/* End Time Select & Nudge Buttons */}
-                    <div className="flex items-center gap-0.5 sm:gap-1">
+                    {/* Joined End Time Control Group */}
+                    <div className="inline-flex items-center rounded-md border bg-background text-xs shadow-2xs">
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-6 text-xs text-muted-foreground"
+                        className="h-8 w-7 rounded-r-none border-r text-xs text-muted-foreground hover:bg-muted"
                         title="Minus 30 mins"
                         onClick={() => nudgeTime(index, rangeIndex, "end_time", -30)}
                       >
@@ -641,13 +639,13 @@ export default function SlotEditor({
                         control={control}
                         name={`slots.${index}.ranges.${rangeIndex}.end_time`}
                         render={({ field: end }) => (
-                          <FormItem className="min-w-28 sm:min-w-32">
+                          <FormItem className="m-0">
                             <Select
                               value={end.value}
                               onValueChange={end.onChange}
                             >
                               <FormControl>
-                                <SelectTrigger className="h-8 text-xs font-medium">
+                                <SelectTrigger className="h-8 border-0 shadow-none rounded-none text-xs font-medium focus:ring-0 w-28">
                                   <SelectValue placeholder="End Time" />
                                 </SelectTrigger>
                               </FormControl>
@@ -670,7 +668,7 @@ export default function SlotEditor({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-6 text-xs text-muted-foreground"
+                        className="h-8 w-7 rounded-l-none border-l text-xs text-muted-foreground hover:bg-muted"
                         title="Plus 30 mins"
                         onClick={() => nudgeTime(index, rangeIndex, "end_time", 30)}
                       >
