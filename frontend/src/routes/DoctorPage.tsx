@@ -53,28 +53,31 @@ export default function DoctorPage() {
     }
     setNameplateError(null);
 
-    // The hospital half and the doctor half are disjoint, so this reassembles
-    // exactly the object surveySchema has always validated.
-    const parsed = surveySchema.parse({ ...hospital, ...values });
-
-    const body = new FormData();
-    body.set("hospital_name", parsed.hospital_name);
-    body.set("has_emergency_service", String(parsed.has_emergency_service));
-    body.set("daily_patients", String(parsed.daily_patients));
-    body.set("avg_duration_min", String(parsed.avg_duration_min));
-    body.set("consultation_fee_bdt", String(parsed.consultation_fee_bdt));
-    // Multipart cannot nest, so these travel as JSON strings. Phones are
-    // objects in the form because useFieldArray requires objects; the API
-    // wants bare strings.
-    body.set("slots", JSON.stringify(toBackendSlots(parsed.slots)));
-    body.set("phones", JSON.stringify(parsed.phones.map((p) => p.value)));
-    body.set("nameplate", nameplate);
-    if (parsed.city.trim()) body.set("city", parsed.city.trim());
-    if (parsed.district.trim()) body.set("district", parsed.district.trim());
-    if (parsed.latitude.trim()) body.set("latitude", parsed.latitude.trim());
-    if (parsed.longitude.trim()) body.set("longitude", parsed.longitude.trim());
-
     try {
+      // The hospital half and the doctor half are disjoint, so this reassembles
+      // exactly the object surveySchema has always validated. parseStoredSession
+      // guarantees the hospital half passes hospitalSchema, so this cannot throw
+      // on a session this build wrote - but it stays inside the try so that a
+      // session from some future build fails loudly rather than silently.
+      const parsed = surveySchema.parse({ ...hospital, ...values });
+
+      const body = new FormData();
+      body.set("hospital_name", parsed.hospital_name);
+      body.set("has_emergency_service", String(parsed.has_emergency_service));
+      body.set("daily_patients", String(parsed.daily_patients));
+      body.set("avg_duration_min", String(parsed.avg_duration_min));
+      body.set("consultation_fee_bdt", String(parsed.consultation_fee_bdt));
+      // Multipart cannot nest, so these travel as JSON strings. Phones are
+      // objects in the form because useFieldArray requires objects; the API
+      // wants bare strings.
+      body.set("slots", JSON.stringify(toBackendSlots(parsed.slots)));
+      body.set("phones", JSON.stringify(parsed.phones.map((p) => p.value)));
+      body.set("nameplate", nameplate);
+      if (parsed.city.trim()) body.set("city", parsed.city.trim());
+      if (parsed.district.trim()) body.set("district", parsed.district.trim());
+      if (parsed.latitude.trim()) body.set("latitude", parsed.latitude.trim());
+      if (parsed.longitude.trim()) body.set("longitude", parsed.longitude.trim());
+
       await createSurvey(body);
       form.reset(emptyDoctorValues());
       setNameplate(null);

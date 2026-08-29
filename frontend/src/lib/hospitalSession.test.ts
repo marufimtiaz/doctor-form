@@ -50,6 +50,29 @@ describe("parseStoredSession", () => {
     expect(parseStoredSession(JSON.stringify(odd))?.doctorsAdded).toBe(0);
   });
 
+  it("returns null when the hospital could not be submitted", () => {
+    // Shallow shape checks are not enough: this payload has a valid name but
+    // no phones, so DoctorPage's surveySchema.parse would throw on submit.
+    const bad = JSON.stringify({
+      hospital: { hospital_name: "Square Hospital" },
+      doctorsAdded: 0,
+    });
+    expect(parseStoredSession(bad)).toBeNull();
+  });
+
+  it("returns null when the hospital has no phones", () => {
+    const bad = { ...session, hospital: { ...session.hospital, phones: [] } };
+    expect(parseStoredSession(JSON.stringify(bad))).toBeNull();
+  });
+
+  it("returns null when the hospital has neither coordinates nor a place", () => {
+    const bad = {
+      ...session,
+      hospital: { ...session.hospital, city: "", district: "" },
+    };
+    expect(parseStoredSession(JSON.stringify(bad))).toBeNull();
+  });
+
   it("falls back to a zero count when doctorsAdded is negative", () => {
     const odd = { ...session, doctorsAdded: -3 };
     expect(parseStoredSession(JSON.stringify(odd))?.doctorsAdded).toBe(0);

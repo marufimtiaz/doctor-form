@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -53,24 +54,25 @@ export function HospitalProvider({ children }: { children: ReactNode }) {
   // session and the /doctors guard never flashes a redirect.
   const [session, setSession] = useState<StoredSession | null>(readSession);
 
+  // Persisting here rather than inside the setters keeps the state updaters
+  // pure - React double-invokes them in StrictMode, and an updater that writes
+  // to storage is a side effect waiting to bite whoever edits it next.
+  useEffect(() => {
+    writeSession(session);
+  }, [session]);
+
   const startHospital = useCallback((draft: HospitalForm) => {
-    const next: StoredSession = { hospital: draft, doctorsAdded: 0 };
-    setSession(next);
-    writeSession(next);
+    setSession({ hospital: draft, doctorsAdded: 0 });
   }, []);
 
   const recordDoctor = useCallback(() => {
-    setSession((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev, doctorsAdded: prev.doctorsAdded + 1 };
-      writeSession(next);
-      return next;
-    });
+    setSession((prev) =>
+      prev ? { ...prev, doctorsAdded: prev.doctorsAdded + 1 } : prev,
+    );
   }, []);
 
   const exitHospital = useCallback(() => {
     setSession(null);
-    writeSession(null);
   }, []);
 
   const value = useMemo(

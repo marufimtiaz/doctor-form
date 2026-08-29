@@ -17,12 +17,7 @@ import ChangePasswordForm from "@/components/PasswordForm";
 import PhoneEditor from "@/components/PhoneEditor";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -43,7 +38,7 @@ import {
 
 export default function HospitalPage() {
   const navigate = useNavigate();
-  const { hospital, doctorsAdded, startHospital } = useHospital();
+  const { hospital, doctorsAdded, startHospital, exitHospital } = useHospital();
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [mine, setMine] = useState<Survey[]>([]);
@@ -93,7 +88,11 @@ export default function HospitalPage() {
             <Alert variant="destructive" className="col-span-2">
               <AlertDescription className="flex flex-wrap items-center gap-2">
                 <span>Could not load your counts.</span>
-                <Button variant="outline" size="sm" onClick={() => void refresh()}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void refresh()}
+                >
                   Retry
                 </Button>
               </AlertDescription>
@@ -103,7 +102,9 @@ export default function HospitalPage() {
               <Card className="py-4">
                 <CardContent className="text-center">
                   <div className="text-2xl font-semibold">{stats.today}</div>
-                  <div className="text-xs text-muted-foreground">filed today</div>
+                  <div className="text-xs text-muted-foreground">
+                    filed today
+                  </div>
                 </CardContent>
               </Card>
               <Card className="py-4">
@@ -117,7 +118,11 @@ export default function HospitalPage() {
         </div>
       </section>
 
-      {hospital && (
+      {hospital ? (
+        // The form is deliberately not rendered beside this. Submitting it
+        // replaces the open hospital and resets its doctor count, so starting
+        // a different one has to be an explicit choice rather than something
+        // an agent can do by scrolling past the banner and typing.
         <Alert>
           <AlertDescription className="flex flex-wrap items-center gap-2">
             <span>
@@ -130,77 +135,83 @@ export default function HospitalPage() {
             <Button size="sm" onClick={() => navigate("/doctors")}>
               Continue with {hospital.hospital_name}
             </Button>
+            <Button variant="outline" size="sm" onClick={exitHospital}>
+              Start a different hospital
+            </Button>
           </AlertDescription>
         </Alert>
+      ) : (
+        <Card>
+          <CardContent>
+            <Form {...form}>
+              <form
+                onSubmit={form.handleSubmit(onSubmit)}
+                className="space-y-5"
+              >
+                <FormField
+                  control={form.control}
+                  name="hospital_name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Hospital name</FormLabel>
+                      <FormControl>
+                        <Input maxLength={200} {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="has_emergency_service"
+                  render={({ field }) => (
+                    <FormItem className="space-y-1.5">
+                      <FormLabel className="text-sm font-medium">
+                        Emergency Service (12am afterwards)
+                      </FormLabel>
+                      <FormControl>
+                        <div className="flex items-center gap-2 pt-0.5">
+                          <Button
+                            type="button"
+                            variant={field.value ? "default" : "outline"}
+                            size="sm"
+                            className="h-8 px-4 text-xs font-semibold"
+                            onClick={() => field.onChange(true)}
+                          >
+                            Yes
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={!field.value ? "default" : "outline"}
+                            size="sm"
+                            className="h-8 px-4 text-xs font-semibold"
+                            onClick={() => field.onChange(false)}
+                          >
+                            No
+                          </Button>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <LocationInput
+                  control={form.control}
+                  setValue={form.setValue}
+                  getValues={form.getValues}
+                />
+                <PhoneEditor control={form.control} />
+
+                <Button type="submit" className="w-full sm:w-auto">
+                  Start adding doctors
+                </Button>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
       )}
-
-      <Card>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-              <FormField
-                control={form.control}
-                name="hospital_name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Hospital name</FormLabel>
-                    <FormControl>
-                      <Input maxLength={200} {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="has_emergency_service"
-                render={({ field }) => (
-                  <FormItem className="space-y-1.5">
-                    <FormLabel className="text-sm font-medium">
-                      Emergency Service (12am afterwards)
-                    </FormLabel>
-                    <FormControl>
-                      <div className="flex items-center gap-2 pt-0.5">
-                        <Button
-                          type="button"
-                          variant={field.value ? "default" : "outline"}
-                          size="sm"
-                          className="h-8 px-4 text-xs font-semibold"
-                          onClick={() => field.onChange(true)}
-                        >
-                          Yes
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={!field.value ? "default" : "outline"}
-                          size="sm"
-                          className="h-8 px-4 text-xs font-semibold"
-                          onClick={() => field.onChange(false)}
-                        >
-                          No
-                        </Button>
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <LocationInput
-                control={form.control}
-                setValue={form.setValue}
-                getValues={form.getValues}
-              />
-              <PhoneEditor control={form.control} />
-
-              <Button type="submit" className="w-full sm:w-auto">
-                Start adding doctors
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold tracking-tight">My surveys</h2>
@@ -210,7 +221,11 @@ export default function HospitalPage() {
           <Alert variant="destructive">
             <AlertDescription className="flex flex-wrap items-center gap-2">
               <span>Could not load your surveys: {loadError}</span>
-              <Button variant="outline" size="sm" onClick={() => void refresh()}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void refresh()}
+              >
                 Retry
               </Button>
             </AlertDescription>
@@ -236,11 +251,15 @@ export default function HospitalPage() {
                         {new Date(s.created_at).toLocaleString()}
                       </time>
                     </div>
-                    <div className="text-muted-foreground">{describePlace(s)}</div>
+                    <div className="text-muted-foreground">
+                      {describePlace(s)}
+                    </div>
                     <div className="text-muted-foreground">
                       {s.slots.map(describeSlot).join(" · ")}
                     </div>
-                    <div className="text-muted-foreground">{s.phones.join(" · ")}</div>
+                    <div className="text-muted-foreground">
+                      {s.phones.join(" · ")}
+                    </div>
                     <div className="text-muted-foreground">
                       {s.daily_patients}/day · {s.avg_duration_min} min · ৳
                       {s.consultation_fee_bdt}
