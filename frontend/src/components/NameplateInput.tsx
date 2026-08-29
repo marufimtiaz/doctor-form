@@ -1,6 +1,7 @@
+import { Camera, ImageUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -40,6 +41,22 @@ export default function NameplateInput({
 
   const message = sizeError ?? error ?? null;
 
+  /** `capture` is set per click rather than fixed on the element: with it the
+   *  OS opens the camera straight to the rear lens, without it the normal
+   *  picker. Desktop browsers ignore it, so "Open camera" degrades to the
+   *  picker there, which is fine - the agents are on phones.
+   *
+   *  One input, not two: the reset above clears inputRef.current.value, and a
+   *  second ref left uncleared would silently stop the same filename being
+   *  re-picked for the next doctor. */
+  const openPicker = (source: "camera" | "library") => {
+    const el = inputRef.current;
+    if (!el) return;
+    if (source === "camera") el.setAttribute("capture", "environment");
+    else el.removeAttribute("capture");
+    el.click();
+  };
+
   return (
     <fieldset className="space-y-3 rounded-lg border p-4">
       <Label className="text-sm font-medium">Doctor nameplate photo</Label>
@@ -47,10 +64,11 @@ export default function NameplateInput({
         Required. The doctor&apos;s name, degrees and specializations are read
         from this image later.
       </p>
-      <Input
+      <input
         ref={inputRef}
         type="file"
         accept="image/*"
+        className="hidden"
         aria-label="Nameplate photo"
         onChange={(e) => {
           const picked = e.target.files?.[0] ?? null;
@@ -64,6 +82,24 @@ export default function NameplateInput({
           onChange(picked);
         }}
       />
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => openPicker("camera")}
+        >
+          <Camera className="size-4" aria-hidden /> Open camera
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => openPicker("library")}
+        >
+          <ImageUp className="size-4" aria-hidden /> Upload image
+        </Button>
+      </div>
       {message && <p className="text-sm text-destructive">{message}</p>}
       {preview && (
         <img

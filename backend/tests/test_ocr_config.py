@@ -10,8 +10,8 @@ def test_ocr_mode_defaults_to_worker(monkeypatch):
     assert Settings(_env_file=None).ocr_mode == "worker"
 
 
-def test_ocr_mode_accepts_the_three_modes():
-    for mode in ("worker", "inline", "off"):
+def test_ocr_mode_accepts_both_modes():
+    for mode in ("worker", "off"):
         assert Settings(_env_file=None, ocr_mode=mode).ocr_mode == mode
 
 

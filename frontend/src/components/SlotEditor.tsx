@@ -38,7 +38,7 @@ import {
   DAY_NAMES,
   emptySlot,
   type DayName,
-  type SurveyForm,
+  type DoctorForm,
 } from "@/schemas/survey";
 
 const PRESETS: { label: string; days: DayName[] }[] = [
@@ -74,9 +74,9 @@ export default function SlotEditor({
   setValue,
   getValues,
 }: {
-  control: Control<SurveyForm>;
-  setValue: UseFormSetValue<SurveyForm>;
-  getValues: UseFormGetValues<SurveyForm>;
+  control: Control<DoctorForm>;
+  setValue: UseFormSetValue<DoctorForm>;
+  getValues: UseFormGetValues<DoctorForm>;
 }) {
   const { fields, append, remove } = useFieldArray({ control, name: "slots" });
   const slotsValue = useWatch({ control, name: "slots" });

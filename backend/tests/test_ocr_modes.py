@@ -1,5 +1,6 @@
 import io
 import json
+from uuid import UUID
 
 import httpx
 import pytest
@@ -31,11 +32,6 @@ def nameplate() -> dict:
 
 
 @pytest.fixture
-def inline_mode(monkeypatch):
-    monkeypatch.setattr(get_settings(), "ocr_mode", "inline")
-
-
-@pytest.fixture
 def off_mode(monkeypatch):
     monkeypatch.setattr(get_settings(), "ocr_mode", "off")
 
@@ -48,65 +44,46 @@ async def test_off_mode_leaves_the_row_pending(client, make_user, s3, off_mode):
     assert resp.json()["doctor_name"] is None
 
 
-async def test_inline_mode_fills_the_fields_before_returning(
-    client, make_user, s3, inline_mode, monkeypatch
-):
-    good = '{"doctor_name": "Rahim Uddin", "doctor_degrees": null, "doctor_specializations": null}'
+def test_inline_is_no_longer_a_valid_mode():
+    from pydantic import ValidationError
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"choices": [{"message": {"content": good}}]})
+    from app.core.config import Settings
 
-    import app.workers.ocr as worker
-
-    original = worker.process_survey
-
-    async def patched(survey_id, *, client=None):
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as c:
-            await original(survey_id, client=c)
-
-    monkeypatch.setattr(worker, "process_survey", patched)
-
-    agent = await make_user()
-    resp = await client.post("/api/surveys", data=form(), files=nameplate(), headers=auth(agent))
-    assert resp.status_code == 201
-    assert resp.json()["doctor_name"] == "Rahim Uddin"
-    assert resp.json()["ocr_status"] == "done"
+    with pytest.raises(ValidationError):
+        Settings(ocr_mode="inline")
 
 
-async def test_inline_failure_never_loses_the_survey(
-    client, make_user, s3, inline_mode, monkeypatch
-):
-    """An agent in a corridor must not lose a filed survey to a 429."""
+async def test_a_failing_read_never_loses_the_survey(client, make_user, s3, monkeypatch):
+    """Rescued from the deleted inline tests: the property outlived the mode.
+
+    An agent in a corridor must not lose a filed survey to a 429. The survey is
+    committed before any model call, so a failure leaves a filed survey behind
+    with the error recorded on the row.
+    """
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(429, json={"error": {"message": "slow down"}})
 
     import app.workers.ocr as worker
 
-    original = worker.process_survey
-
-    async def patched(survey_id, *, client=None):
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as c:
-            await original(survey_id, client=c)
-
-    monkeypatch.setattr(worker, "process_survey", patched)
-
     agent = await make_user()
     resp = await client.post("/api/surveys", data=form(), files=nameplate(), headers=auth(agent))
-
-    # The submit still succeeds.
     assert resp.status_code == 201
-    async with SessionLocal() as session:
-        from uuid import UUID
 
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as c:
+        await worker.process_survey(UUID(resp.json()["id"]), client=c)
+
+    async with SessionLocal() as session:
         row = await session.get(ChamberSurvey, UUID(resp.json()["id"]))
         assert row is not None
+        assert row.ocr_status == "pending"
         assert row.ocr_attempts == 1
         assert "429" in row.ocr_error
 
 
 async def test_off_mode_starts_no_background_worker(off_mode):
     from asgi_lifespan import LifespanManager
+
     from app.main import app
 
     async with LifespanManager(app):

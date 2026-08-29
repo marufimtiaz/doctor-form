@@ -1,9 +1,10 @@
 import io
 import json
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import ValidationError
 from sqlalchemy import func
 from sqlmodel import select
@@ -18,6 +19,7 @@ from app.models.survey import ChamberSurvey
 from app.models.survey_phone import SurveyPhone
 from app.schemas.survey import SlotRead, StatsRead, SurveyCreate, SurveyRead
 from app.services import storage
+from app.services.ocr import DoctorFields, OcrError, extract_doctor_fields
 
 router = APIRouter(prefix="/surveys", tags=["surveys"])
 
@@ -53,6 +55,35 @@ def _parse_json_field(raw: str, field: str) -> object:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY, f"{field} must be valid JSON"
         ) from exc
+
+
+# Declared with the other literal paths, above /{survey_id}.
+@router.post("/nameplate/preview", response_model=DoctorFields | None)
+async def preview_nameplate(
+    user: CurrentUser,
+    nameplate: Annotated[UploadFile, File()],
+) -> Response | DoctorFields:
+    """Read a nameplate without filing anything.
+
+    Creates no row and writes nothing to storage: the image is uploaded once, at
+    submit. A failure here is not the agent's problem - the form files the survey
+    `pending` and the worker reads it later.
+    """
+    if settings.ocr_mode == "off":
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    blob = await nameplate.read()
+    if len(blob) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"nameplate exceeds {MAX_UPLOAD_BYTES // (1024 * 1024)}MB",
+        )
+
+    content_type = storage.sniff_image_type(blob, nameplate.content_type)
+    try:
+        return await extract_doctor_fields(blob, content_type)
+    except OcrError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)[:200]) from exc
 
 
 # Declared before /{survey_id} - otherwise "stats" is parsed as a UUID.
@@ -111,6 +142,9 @@ async def create_survey(
     district: Annotated[str | None, Form()] = None,
     latitude: Annotated[float | None, Form()] = None,
     longitude: Annotated[float | None, Form()] = None,
+    doctor_name: Annotated[str | None, Form()] = None,
+    doctor_degrees: Annotated[str | None, Form()] = None,
+    doctor_specializations: Annotated[str | None, Form()] = None,
 ) -> SurveyRead:
     """Multipart so the nameplate and the form arrive in one request.
 
@@ -132,6 +166,9 @@ async def create_survey(
             consultation_fee_bdt=consultation_fee_bdt,
             slots=_parse_json_field(slots, "slots"),
             phones=_parse_json_field(phones, "phones"),
+            doctor_name=doctor_name,
+            doctor_degrees=doctor_degrees,
+            doctor_specializations=doctor_specializations,
         )
     except ValidationError as exc:
         # include_context=False drops the raw ValueError objects pydantic puts
@@ -165,6 +202,18 @@ async def create_survey(
         avg_duration_min=payload.avg_duration_min,
         consultation_fee_bdt=payload.consultation_fee_bdt,
     )
+    # Any one field present means a preview ran and the agent approved what they
+    # saw, so there is nothing left for the worker to do. All three blank is
+    # treated as no preview: a nameplate the model could not read is worth
+    # retrying, not recording as a finished empty read.
+    if payload.doctor_name or payload.doctor_degrees or payload.doctor_specializations:
+        row.doctor_name = payload.doctor_name
+        row.doctor_degrees = payload.doctor_degrees
+        row.doctor_specializations = payload.doctor_specializations
+        row.ocr_status = "done"
+        row.ocr_source = "upload"
+        row.ocr_completed_at = datetime.now(UTC)
+
     session.add(row)
     await session.commit()
     await session.refresh(row)
@@ -181,15 +230,5 @@ async def create_survey(
     for phone in payload.phones:
         session.add(SurveyPhone(survey_id=row.id, phone=phone))
     await session.commit()
-
-    if settings.ocr_mode == "inline":
-        # Imported here so the API does not depend on the worker package at
-        # module scope, which keeps `OCR_MODE=off` genuinely inert.
-        from app.workers.ocr import process_survey
-
-        # The survey is already committed. process_survey never raises, so a
-        # 429 from OpenRouter cannot cost an agent a filed survey.
-        await process_survey(row.id)
-        await session.refresh(row)
 
     return await survey_to_read(session, row)

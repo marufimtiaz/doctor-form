@@ -152,6 +152,7 @@ async def correct_doctor_fields(
         setattr(row, field, value)
 
     row.ocr_status = "done"
+    row.ocr_source = "admin"
     row.ocr_error = None
     row.ocr_next_attempt_at = None
     row.ocr_completed_at = datetime.now(UTC)
@@ -171,6 +172,7 @@ async def reread_nameplate(survey_id: UUID, session: SessionDep, _: AdminUser) -
         raise HTTPException(status.HTTP_404_NOT_FOUND, "survey not found")
 
     row.ocr_status = "pending"
+    row.ocr_source = None
     row.ocr_attempts = 0
     row.ocr_error = None
     row.ocr_started_at = None
@@ -179,8 +181,3 @@ async def reread_nameplate(survey_id: UUID, session: SessionDep, _: AdminUser) -
     row.updated_at = datetime.now(UTC)
     session.add(row)
     await session.commit()
-
-    if settings.ocr_mode == "inline":
-        from app.workers.ocr import process_survey
-
-        await process_survey(row.id)

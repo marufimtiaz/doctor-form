@@ -26,6 +26,10 @@ class ChamberSurvey(SQLModel, table=True):
             "ocr_status IN ('pending', 'processing', 'done', 'failed')",
             name="ck_surveys_ocr_status",
         ),
+        CheckConstraint(
+            "ocr_source IS NULL OR ocr_source IN ('upload', 'worker', 'admin')",
+            name="ck_surveys_ocr_source",
+        ),
     )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
@@ -59,6 +63,10 @@ class ChamberSurvey(SQLModel, table=True):
     # Truncated to 1000 chars on write; a model returning prose would otherwise
     # write an unbounded string into every failed row.
     ocr_error: str | None = Field(default=None, max_length=1000)
+    # Which path produced the doctor fields: read on upload and approved by the
+    # agent, filled silently by the worker, or corrected by an admin. NULL means
+    # the row predates this column or has not been read yet.
+    ocr_source: str | None = Field(default=None, max_length=16)
     ocr_started_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )

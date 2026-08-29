@@ -1,43 +1,32 @@
-import { LogOut, Stethoscope } from "lucide-react";
-import { Link, Navigate, Route, Routes } from "react-router-dom";
+import { Stethoscope } from "lucide-react";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { RequireAdmin, useAuth } from "@/auth";
+import BottomNav from "@/components/BottomNav";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
+import AccountPage from "@/routes/AccountPage";
 import AdminPage from "@/routes/AdminPage";
-import AgentPage from "@/routes/AgentPage";
+import DoctorPage from "@/routes/DoctorPage";
+import HospitalPage from "@/routes/HospitalPage";
 import LoginPage from "@/routes/LoginPage";
+import SurveysPage from "@/routes/SurveysPage";
 
+/** Title bar only. Navigation lives in BottomNav and sign-out on /account,
+ *  which is where a phone app puts them. */
 function Header() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   if (!user) return null;
 
   return (
     <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-4 py-3">
+      <div className="mx-auto flex max-w-3xl items-center gap-2 px-4 py-3">
         <Stethoscope className="size-5 shrink-0 text-primary" aria-hidden />
-        <nav className="flex items-center gap-1">
-          <Button asChild variant="ghost" size="sm">
-            <Link to="/">Survey</Link>
-          </Button>
-          {user.role === "admin" && (
-            <Button asChild variant="ghost" size="sm">
-              <Link to="/admin">Admin</Link>
-            </Button>
-          )}
-        </nav>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="hidden text-sm text-muted-foreground sm:inline">
-            {user.name}
-          </span>
-          <Badge variant="secondary">{user.role}</Badge>
-          <Button variant="ghost" size="sm" onClick={logout}>
-            <LogOut className="size-4" aria-hidden />
-            <span className="sr-only sm:not-sr-only sm:ml-1">Sign out</span>
-          </Button>
-        </div>
+        <span className="font-semibold tracking-tight">Doctor Form</span>
+        <Badge variant="secondary" className="ml-auto">
+          {user.role}
+        </Badge>
       </div>
     </header>
   );
@@ -45,6 +34,7 @@ function Header() {
 
 export default function App() {
   const { user, loading } = useAuth();
+  const { pathname } = useLocation();
 
   if (loading) {
     return (
@@ -56,21 +46,31 @@ export default function App() {
   }
   if (!user) return <LoginPage />;
 
+  const showNav = pathname !== "/doctors";
+
   return (
     <>
       <Header />
-      <Routes>
-        <Route path="/" element={<AgentPage />} />
-        <Route
-          path="/admin"
-          element={
-            <RequireAdmin>
-              <AdminPage />
-            </RequireAdmin>
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      {/* Padding clears the fixed bar so the last control on a page stays
+          tappable; without it the bar sits on top of page content. */}
+      <div className={showNav ? "pb-[calc(4rem+env(safe-area-inset-bottom))]" : ""}>
+        <Routes>
+          <Route path="/" element={<HospitalPage />} />
+          <Route path="/doctors" element={<DoctorPage />} />
+          <Route path="/surveys" element={<SurveysPage />} />
+          <Route path="/account" element={<AccountPage />} />
+          <Route
+            path="/admin"
+            element={
+              <RequireAdmin>
+                <AdminPage />
+              </RequireAdmin>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </div>
+      {showNav && <BottomNav />}
       <Toaster richColors position="top-center" />
     </>
   );
