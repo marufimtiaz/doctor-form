@@ -14,10 +14,30 @@ const numeric = (
   return z.preprocess(blankToUndefined, num);
 };
 
+export const DAY_NAMES = [
+  "Sat",
+  "Sun",
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+] as const;
+export type DayName = (typeof DAY_NAMES)[number];
+
+export const DAY_NAME_TO_INT: Record<DayName, number> = {
+  Sat: 5,
+  Sun: 6,
+  Mon: 0,
+  Tue: 1,
+  Wed: 2,
+  Thu: 3,
+  Fri: 4,
+};
+
 export const slotSchema = z
   .object({
-    // 0=Monday .. 6=Sunday, matching the backend and datetime.weekday().
-    day_of_week: z.coerce.number().int().min(0).max(6),
+    days: z.array(z.enum(DAY_NAMES)).min(1, "Select at least one day."),
     start_time: z.string().min(1, "Start time is required."),
     end_time: z.string().min(1, "End time is required."),
   })
@@ -92,12 +112,22 @@ export const surveySchema = z
         message: "Provide coordinates or city and district.",
       });
     }
-  });
+  })
+  .transform((data) => ({
+    ...data,
+    slots: data.slots.flatMap((s) =>
+      s.days.map((day) => ({
+        day_of_week: DAY_NAME_TO_INT[day],
+        start_time: s.start_time,
+        end_time: s.end_time,
+      })),
+    ),
+  }));
 
 export type SurveyForm = z.input<typeof surveySchema>;
 
 export const emptySlot = () => ({
-  day_of_week: 5, // Saturday - the usual first working day here.
+  days: ["Sat"] as DayName[],
   start_time: "17:00",
   end_time: "20:00",
 });

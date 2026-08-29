@@ -69,20 +69,36 @@ describe("location", () => {
 describe("slots", () => {
   const withCity = { city: "Dhaka", district: "Dhanmondi" };
 
-  it("requires at least one", () => {
+  it("requires at least one slot", () => {
     expect(parse({ ...withCity, slots: [] }).success).toBe(false);
   });
 
-  it("rejects an end at or before the start", () => {
-    const slots = [{ day_of_week: 5, start_time: "20:00", end_time: "17:00" }];
+  it("requires at least one day per slot", () => {
+    const slots = [{ days: [], start_time: "17:00", end_time: "20:00" }];
     expect(messages(parse({ ...withCity, slots }))).toContain(
-      "End must be after start.",
+      "Select at least one day.",
     );
   });
 
-  it("rejects a day outside 0-6", () => {
-    const slots = [{ day_of_week: 7, start_time: "17:00", end_time: "20:00" }];
-    expect(parse({ ...withCity, slots }).success).toBe(false);
+  it("flattens multiple days into backend integer slot items", () => {
+    const slots = [
+      { days: ["Sat", "Sun"], start_time: "17:00", end_time: "20:00" },
+    ];
+    const result = parse({ ...withCity, slots });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.slots).toEqual([
+        { day_of_week: 5, start_time: "17:00", end_time: "20:00" },
+        { day_of_week: 6, start_time: "17:00", end_time: "20:00" },
+      ]);
+    }
+  });
+
+  it("rejects an end at or before the start", () => {
+    const slots = [{ days: ["Sat"], start_time: "20:00", end_time: "17:00" }];
+    expect(messages(parse({ ...withCity, slots }))).toContain(
+      "End must be after start.",
+    );
   });
 });
 
