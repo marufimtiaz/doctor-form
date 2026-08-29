@@ -1,10 +1,10 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Navigate, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
-import { createSurvey } from "@/api";
+import { createSurvey, previewNameplate } from "@/api";
 import NameplateInput from "@/components/NameplateInput";
 import PhoneEditor from "@/components/PhoneEditor";
 import SlotEditor from "@/components/SlotEditor";
@@ -19,6 +19,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useHospital } from "@/hospital";
 import {
   doctorSchema,
@@ -49,10 +50,49 @@ export default function DoctorPage() {
     };
   }, [hospital]);
 
+  const [ocrState, setOcrState] = useState<
+    "idle" | "reading" | "done" | "failed"
+  >("idle");
+  // An agent can replace the photo while a call is in flight. Without this the
+  // slower first response overwrites the second photo's fields, leaving one
+  // nameplate's details beside a different nameplate's image - and then stored
+  // as approved by a human.
+  const previewToken = useRef(0);
+
   const form = useForm<DoctorForm>({
     resolver: zodResolver(doctorSchema),
     defaultValues: doctorDefaults(),
   });
+
+  const readNameplate = async (picked: File | null) => {
+    const token = ++previewToken.current;
+    form.setValue("doctor_name", "");
+    form.setValue("doctor_degrees", "");
+    form.setValue("doctor_specializations", "");
+
+    if (!picked) {
+      setOcrState("idle");
+      return;
+    }
+
+    setOcrState("reading");
+    try {
+      const fields = await previewNameplate(picked);
+      if (token !== previewToken.current) return;
+      if (!fields) {
+        setOcrState("idle");
+        return;
+      }
+      form.setValue("doctor_name", fields.doctor_name ?? "");
+      form.setValue("doctor_degrees", fields.doctor_degrees ?? "");
+      form.setValue("doctor_specializations", fields.doctor_specializations ?? "");
+      setOcrState("done");
+    } catch {
+      if (token !== previewToken.current) return;
+      // Not shouted at the agent: the worker reads it after filing.
+      setOcrState("failed");
+    }
+  };
 
   if (!hospital) return <Navigate to="/" replace />;
 
@@ -78,6 +118,11 @@ export default function DoctorPage() {
       body.set("daily_patients", String(parsed.daily_patients));
       body.set("avg_duration_min", String(parsed.avg_duration_min));
       body.set("consultation_fee_bdt", String(parsed.consultation_fee_bdt));
+      // Blank means no preview ran; the server then leaves the row to the worker.
+      if (parsed.doctor_name) body.set("doctor_name", parsed.doctor_name);
+      if (parsed.doctor_degrees) body.set("doctor_degrees", parsed.doctor_degrees);
+      if (parsed.doctor_specializations)
+        body.set("doctor_specializations", parsed.doctor_specializations);
       // Multipart cannot nest, so these travel as JSON strings. Phones are
       // objects in the form because useFieldArray requires objects; the API
       // wants bare strings.
@@ -93,6 +138,9 @@ export default function DoctorPage() {
       form.reset(doctorDefaults());
       setNameplate(null);
       setResetKey((n) => n + 1);
+      // Also discards any preview still in flight for the doctor just filed, so
+      // its response cannot land in the next doctor's form.
+      void readNameplate(null);
       recordDoctor();
       toast.success("Doctor filed. Next doctor?");
     } catch (err) {
@@ -130,6 +178,11 @@ export default function DoctorPage() {
       <Card>
         <CardContent>
           <Form {...form}>
+            {/* react-hooks/refs cannot see that onSubmit only ever runs from a
+                submit event, which is exactly where the rule's own message says
+                a ref belongs. It reaches previewToken through readNameplate, to
+                discard a preview still in flight for the doctor just filed. */}
+            {/* eslint-disable-next-line react-hooks/refs */}
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
               <NameplateInput
                 key={resetKey}
@@ -139,9 +192,51 @@ export default function DoctorPage() {
                   // Otherwise the destructive "required" text sits under a
                   // perfectly valid image until the next submit attempt.
                   if (f) setNameplateError(null);
+                  void readNameplate(f);
                 }}
                 error={nameplateError}
               />
+
+              <fieldset className="space-y-3 rounded-lg border p-4">
+                <div>
+                  <Label className="text-sm font-medium">Doctor details</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {ocrState === "reading"
+                      ? "Reading the nameplate…"
+                      : ocrState === "done"
+                        ? "Read from the nameplate. Correct anything that is wrong."
+                        : ocrState === "failed"
+                          ? "Couldn't read the nameplate. It will be read after filing."
+                          : "Filled in from the nameplate photo once you add one."}
+                  </p>
+                </div>
+                {(
+                  [
+                    ["doctor_name", "Name"],
+                    ["doctor_degrees", "Degrees"],
+                    ["doctor_specializations", "Specializations"],
+                  ] as const
+                ).map(([name, label]) => (
+                  <FormField
+                    key={name}
+                    control={form.control}
+                    name={name}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">{label}</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            value={field.value ?? ""}
+                            disabled={ocrState === "reading"}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ))}
+              </fieldset>
 
               <PhoneEditor
                 control={form.control}
