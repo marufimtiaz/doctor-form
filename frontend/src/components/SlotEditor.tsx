@@ -129,6 +129,46 @@ function findOverlaps(ranges: Array<{ start_time: string; end_time: string }>) {
   return overlaps;
 }
 
+// Strictly filter dropdown options based on adjacent shift boundaries
+function getFilteredTimeOptions(
+  field: "start_time" | "end_time",
+  rangeIndex: number,
+  ranges: Array<{ start_time: string; end_time: string }>,
+) {
+  const range = ranges[rangeIndex];
+  if (!range) return TIME_OPTIONS;
+
+  if (rangeIndex === 0) {
+    // Shift 1
+    const nextShift = ranges[1];
+    const maxBound = nextShift?.start_time || "24:00";
+
+    if (field === "start_time") {
+      // Must be < end_time and < maxBound
+      const upper = range.end_time && range.end_time < maxBound ? range.end_time : maxBound;
+      return TIME_OPTIONS.filter((t) => t.value < upper);
+    } else {
+      // end_time: Must be > start_time and <= maxBound
+      const lower = range.start_time || "06:00";
+      return TIME_OPTIONS.filter((t) => t.value > lower && t.value <= maxBound);
+    }
+  } else {
+    // Shift 2
+    const prevShift = ranges[0];
+    const minBound = prevShift?.end_time || "06:00";
+
+    if (field === "start_time") {
+      // Must be >= minBound and < end_time
+      const upper = range.end_time || "24:00";
+      return TIME_OPTIONS.filter((t) => t.value >= minBound && t.value < upper);
+    } else {
+      // end_time: Must be > start_time
+      const lower = range.start_time || minBound;
+      return TIME_OPTIONS.filter((t) => t.value > lower);
+    }
+  }
+}
+
 function findFarthestFreeSlot(ranges: Array<{ start_time: string; end_time: string }>): { start: string; end: string } | null {
   const totalSlots = 32;
   const isOccupied = new Array(totalSlots).fill(false);
@@ -279,11 +319,14 @@ export default function SlotEditor({
       const currentRange = currentRanges[rangeIndex];
       if (!currentRange) return;
 
-      if (field === "start_time" && currentRange.end_time && nextTime >= currentRange.end_time) {
-        return;
-      }
-      if (field === "end_time" && currentRange.start_time && nextTime <= currentRange.start_time) {
-        return;
+      if (rangeIndex === 0) {
+        const maxBound = currentRanges[1]?.start_time || "24:00";
+        if (field === "start_time" && nextTime >= (currentRange.end_time < maxBound ? currentRange.end_time : maxBound)) return;
+        if (field === "end_time" && (nextTime <= currentRange.start_time || nextTime > maxBound)) return;
+      } else {
+        const minBound = currentRanges[0]?.end_time || "06:00";
+        if (field === "start_time" && (nextTime < minBound || nextTime >= currentRange.end_time)) return;
+        if (field === "end_time" && nextTime <= currentRange.start_time) return;
       }
 
       currentRanges[rangeIndex] = { ...currentRange, [field]: nextTime };
@@ -513,7 +556,7 @@ export default function SlotEditor({
               </Alert>
             )}
 
-            {/* Shift Rows with Chronological Auto-Sort */}
+            {/* Shift Rows with Hard-Filtered Dropdown Options */}
             <div className="space-y-2">
               <span className="text-xs font-medium text-muted-foreground">
                 Time Shift Ranges:
@@ -527,6 +570,9 @@ export default function SlotEditor({
                 const isHovered =
                   hoveredShift?.groupIndex === index &&
                   hoveredShift?.rangeIndex === rangeIndex;
+
+                const startOptions = getFilteredTimeOptions("start_time", rangeIndex, currentRanges);
+                const endOptions = getFilteredTimeOptions("end_time", rangeIndex, currentRanges);
 
                 const handleTimeChange = (field: "start_time" | "end_time", value: string) => {
                   const updated = [...currentRanges];
@@ -586,7 +632,7 @@ export default function SlotEditor({
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent className="max-h-56">
-                                {TIME_OPTIONS.map((t) => (
+                                {startOptions.map((t) => (
                                   <SelectItem
                                     key={t.value}
                                     value={t.value}
@@ -618,7 +664,7 @@ export default function SlotEditor({
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent className="max-h-56">
-                                {TIME_OPTIONS.map((t) => (
+                                {endOptions.map((t) => (
                                   <SelectItem
                                     key={t.value}
                                     value={t.value}
