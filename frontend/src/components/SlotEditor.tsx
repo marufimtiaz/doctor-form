@@ -1,4 +1,5 @@
-import { Plus, Trash2, X } from "lucide-react";
+import { AlertTriangle, Clock, Plus, Trash2, Users, X } from "lucide-react";
+import { useState } from "react";
 import {
   useFieldArray,
   useWatch,
@@ -6,6 +7,7 @@ import {
   type UseFormSetValue,
 } from "react-hook-form";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   FormControl,
@@ -55,6 +57,16 @@ for (let hour = 6; hour <= 23; hour++) {
   }
 }
 
+// Get color scheme based on start time
+function getShiftColorScheme(startStr: string) {
+  if (!startStr) return { bg: "bg-primary/80", border: "border-primary", text: "text-primary" };
+  const [h] = startStr.split(":").map(Number);
+  if (h < 12) return { bg: "bg-amber-500", border: "border-amber-500", text: "text-amber-600 bg-amber-50" };
+  if (h < 17) return { bg: "bg-sky-500", border: "border-sky-500", text: "text-sky-600 bg-sky-50" };
+  if (h < 20) return { bg: "bg-indigo-600", border: "border-indigo-600", text: "text-indigo-600 bg-indigo-50" };
+  return { bg: "bg-slate-700", border: "border-slate-700", text: "text-slate-700 bg-slate-100" };
+}
+
 function formatDuration(startStr: string, endStr: string): string {
   if (!startStr || !endStr || endStr <= startStr) return "";
   const [sh, sm] = startStr.split(":").map(Number);
@@ -68,7 +80,6 @@ function formatDuration(startStr: string, endStr: string): string {
   return `${mins} min`;
 }
 
-// Convert "HH:MM" to percentage position on timeline (8 AM = 0%, 11 PM = 100%)
 function timeToPercent(timeStr: string): number {
   if (!timeStr) return 0;
   const [h, m] = timeStr.split(":").map(Number);
@@ -77,6 +88,34 @@ function timeToPercent(timeStr: string): number {
   const endMins = 23 * 60; // 11 PM
   const clamped = Math.max(startMins, Math.min(endMins, mins));
   return ((clamped - startMins) / (endMins - startMins)) * 100;
+}
+
+// Adjust time string by offset minutes (clamped between 06:00 and 23:00)
+function adjustTime(timeStr: string, deltaMins: number): string {
+  if (!timeStr) return timeStr;
+  const [h, m] = timeStr.split(":").map(Number);
+  const totalMins = Math.max(6 * 60, Math.min(23 * 60, h * 60 + m + deltaMins));
+  const newH = String(Math.floor(totalMins / 60)).padStart(2, "0");
+  const newM = String(totalMins % 60).padStart(2, "0");
+  return `${newH}:${newM}`;
+}
+
+// Check for overlapping ranges in a single slot group
+function findOverlaps(ranges: Array<{ start_time: string; end_time: string }>) {
+  const overlaps: string[] = [];
+  for (let i = 0; i < ranges.length; i++) {
+    for (let j = i + 1; j < ranges.length; j++) {
+      const r1 = ranges[i];
+      const r2 = ranges[j];
+      if (!r1.start_time || !r1.end_time || !r2.start_time || !r2.end_time) continue;
+      const startMax = r1.start_time > r2.start_time ? r1.start_time : r2.start_time;
+      const endMin = r1.end_time < r2.end_time ? r1.end_time : r2.end_time;
+      if (startMax < endMin) {
+        overlaps.push(`Shift ${i + 1} and Shift ${j + 1} overlap (${startMax} – ${endMin})`);
+      }
+    }
+  }
+  return overlaps;
 }
 
 export default function SlotEditor({
@@ -88,6 +127,32 @@ export default function SlotEditor({
 }) {
   const { fields, append, remove } = useFieldArray({ control, name: "slots" });
   const slotsValue = useWatch({ control, name: "slots" });
+  const avgDuration = useWatch({ control, name: "avg_duration_min" });
+  const [hoveredShift, setHoveredShift] = useState<{
+    groupIndex: number;
+    rangeIndex: number;
+  } | null>(null);
+
+  // Compute live schedule statistics
+  const activeDaysSet = new Set<DayName>();
+  let totalWeeklyMins = 0;
+
+  (slotsValue || []).forEach((slot) => {
+    const daysCount = slot.days?.length || 0;
+    (slot.days || []).forEach((d) => activeDaysSet.add(d));
+    (slot.ranges || []).forEach((r) => {
+      if (r.start_time && r.end_time && r.end_time > r.start_time) {
+        const [sh, sm] = r.start_time.split(":").map(Number);
+        const [eh, em] = r.end_time.split(":").map(Number);
+        const durationMins = eh * 60 + em - (sh * 60 + sm);
+        totalWeeklyMins += durationMins * daysCount;
+      }
+    });
+  });
+
+  const totalWeeklyHours = (totalWeeklyMins / 60).toFixed(1).replace(/\.0$/, "");
+  const durationNum = Number(avgDuration) || 10;
+  const estimatedCapacity = Math.floor(totalWeeklyMins / durationNum);
 
   const toggleDay = (slotIndex: number, day: DayName) => {
     const currentDays = slotsValue?.[slotIndex]?.days || [];
@@ -127,20 +192,53 @@ export default function SlotEditor({
     );
   };
 
+  const nudgeTime = (
+    slotIndex: number,
+    rangeIndex: number,
+    field: "start_time" | "end_time",
+    deltaMins: number,
+  ) => {
+    const currentVal = slotsValue?.[slotIndex]?.ranges?.[rangeIndex]?.[field] || "";
+    const nextVal = adjustTime(currentVal, deltaMins);
+    setValue(`slots.${slotIndex}.ranges.${rangeIndex}.${field}`, nextVal, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+  };
+
   return (
-    <fieldset className="space-y-6 rounded-lg border p-4">
-      <div className="flex items-center justify-between">
-        <Label className="text-base font-semibold">Availability Schedule</Label>
+    <fieldset className="space-y-6 rounded-lg border p-4 bg-card">
+      {/* Header Summary Badges Bar */}
+      <div className="space-y-2 border-b pb-3">
+        <div className="flex items-center justify-between">
+          <Label className="text-base font-bold">Availability Schedule</Label>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 font-semibold text-primary">
+            <Clock className="size-3.5" />
+            {totalWeeklyHours} hrs/week
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 font-semibold text-secondary-foreground">
+            🗓️ {activeDaysSet.size} active day{activeDaysSet.size !== 1 ? "s" : ""}
+          </span>
+          {estimatedCapacity > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+              <Users className="size-3.5" />
+              ~{estimatedCapacity} max patients/week
+            </span>
+          )}
+        </div>
       </div>
 
       {fields.map((field, index) => {
         const currentDays = slotsValue?.[index]?.days || [];
         const currentRanges = slotsValue?.[index]?.ranges || [];
+        const overlaps = findOverlaps(currentRanges);
 
         return (
           <div
             key={field.id}
-            className="space-y-4 rounded-lg border bg-card p-4 shadow-sm"
+            className="space-y-4 rounded-lg border bg-background p-4 shadow-sm transition-all"
           >
             {/* Slot Header */}
             <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
@@ -240,22 +338,39 @@ export default function SlotEditor({
                     style={{ left: `${(i / 30) * 100}%` }}
                   />
                 ))}
-                {/* Visual Segments for Active Ranges */}
+                {/* Visual Color-Coded Segments for Active Ranges */}
                 {currentRanges.map((range, rIdx) => {
                   const left = timeToPercent(range.start_time);
                   const right = timeToPercent(range.end_time);
                   const width = Math.max(0, right - left);
+                  const colors = getShiftColorScheme(range.start_time);
+                  const isHovered =
+                    hoveredShift?.groupIndex === index &&
+                    hoveredShift?.rangeIndex === rIdx;
+
                   return (
                     <div
                       key={rIdx}
-                      className="absolute top-0 bottom-0 bg-primary/80 transition-all rounded-sm"
+                      className={`absolute top-0 bottom-0 ${colors.bg} transition-all rounded-sm ${
+                        isHovered ? "ring-2 ring-foreground z-10 scale-y-110" : "opacity-90"
+                      }`}
                       style={{ left: `${left}%`, width: `${width}%` }}
-                      title={`${range.start_time} - ${range.end_time}`}
+                      title={`Shift ${rIdx + 1}: ${range.start_time} - ${range.end_time}`}
                     />
                   );
                 })}
               </div>
             </div>
+
+            {/* Overlap Conflict Warning Alert */}
+            {overlaps.length > 0 && (
+              <Alert variant="destructive" className="py-2">
+                <AlertTriangle className="size-4" />
+                <AlertDescription className="text-xs font-medium">
+                  {overlaps.join(" · ")}
+                </AlertDescription>
+              </Alert>
+            )}
 
             {/* Time Ranges List */}
             <div className="space-y-3">
@@ -267,83 +382,137 @@ export default function SlotEditor({
                   range.start_time,
                   range.end_time,
                 );
+                const colors = getShiftColorScheme(range.start_time);
+                const isHovered =
+                  hoveredShift?.groupIndex === index &&
+                  hoveredShift?.rangeIndex === rangeIndex;
 
                 return (
                   <div
                     key={rangeIndex}
-                    className="flex flex-wrap items-center gap-2 rounded-md border p-2 bg-background"
+                    onMouseEnter={() =>
+                      setHoveredShift({ groupIndex: index, rangeIndex })
+                    }
+                    onMouseLeave={() => setHoveredShift(null)}
+                    className={`flex flex-wrap items-center gap-2 rounded-md border p-2.5 bg-card transition-all border-l-4 ${colors.border} ${
+                      isHovered ? "ring-2 ring-primary/40 shadow-sm" : ""
+                    }`}
                   >
-                    <span className="text-xs font-medium min-w-16">
+                    <span className="text-xs font-bold min-w-16">
                       Shift {rangeIndex + 1}:
                     </span>
 
-                    {/* Start Time Select */}
-                    <FormField
-                      control={control}
-                      name={`slots.${index}.ranges.${rangeIndex}.start_time`}
-                      render={({ field: start }) => (
-                        <FormItem className="flex-1 min-w-32">
-                          <Select
-                            value={start.value}
-                            onValueChange={start.onChange}
-                          >
-                            <FormControl>
-                              <SelectTrigger className="h-8 text-xs">
-                                <SelectValue placeholder="Start Time" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent className="max-h-56">
-                              {TIME_OPTIONS.map((t) => (
-                                <SelectItem
-                                  key={t.value}
-                                  value={t.value}
-                                  className="text-xs"
-                                >
-                                  {t.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </FormItem>
-                      )}
-                    />
+                    {/* Start Time Select & Nudge Buttons */}
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-6 text-xs text-muted-foreground"
+                        title="Minus 30 mins"
+                        onClick={() => nudgeTime(index, rangeIndex, "start_time", -30)}
+                      >
+                        -
+                      </Button>
+                      <FormField
+                        control={control}
+                        name={`slots.${index}.ranges.${rangeIndex}.start_time`}
+                        render={({ field: start }) => (
+                          <FormItem className="min-w-32">
+                            <Select
+                              value={start.value}
+                              onValueChange={start.onChange}
+                            >
+                              <FormControl>
+                                <SelectTrigger className="h-8 text-xs font-medium">
+                                  <SelectValue placeholder="Start Time" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent className="max-h-56">
+                                {TIME_OPTIONS.map((t) => (
+                                  <SelectItem
+                                    key={t.value}
+                                    value={t.value}
+                                    className="text-xs"
+                                  >
+                                    {t.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </FormItem>
+                        )}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-6 text-xs text-muted-foreground"
+                        title="Plus 30 mins"
+                        onClick={() => nudgeTime(index, rangeIndex, "start_time", 30)}
+                      >
+                        +
+                      </Button>
+                    </div>
 
-                    <span className="text-xs text-muted-foreground">to</span>
+                    <span className="text-xs font-medium text-muted-foreground">to</span>
 
-                    {/* End Time Select */}
-                    <FormField
-                      control={control}
-                      name={`slots.${index}.ranges.${rangeIndex}.end_time`}
-                      render={({ field: end }) => (
-                        <FormItem className="flex-1 min-w-32">
-                          <Select
-                            value={end.value}
-                            onValueChange={end.onChange}
-                          >
-                            <FormControl>
-                              <SelectTrigger className="h-8 text-xs">
-                                <SelectValue placeholder="End Time" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent className="max-h-56">
-                              {TIME_OPTIONS.map((t) => (
-                                <SelectItem
-                                  key={t.value}
-                                  value={t.value}
-                                  className="text-xs"
-                                >
-                                  {t.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </FormItem>
-                      )}
-                    />
+                    {/* End Time Select & Nudge Buttons */}
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-6 text-xs text-muted-foreground"
+                        title="Minus 30 mins"
+                        onClick={() => nudgeTime(index, rangeIndex, "end_time", -30)}
+                      >
+                        -
+                      </Button>
+                      <FormField
+                        control={control}
+                        name={`slots.${index}.ranges.${rangeIndex}.end_time`}
+                        render={({ field: end }) => (
+                          <FormItem className="min-w-32">
+                            <Select
+                              value={end.value}
+                              onValueChange={end.onChange}
+                            >
+                              <FormControl>
+                                <SelectTrigger className="h-8 text-xs font-medium">
+                                  <SelectValue placeholder="End Time" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent className="max-h-56">
+                                {TIME_OPTIONS.map((t) => (
+                                  <SelectItem
+                                    key={t.value}
+                                    value={t.value}
+                                    className="text-xs"
+                                  >
+                                    {t.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </FormItem>
+                        )}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-6 text-xs text-muted-foreground"
+                        title="Plus 30 mins"
+                        onClick={() => nudgeTime(index, rangeIndex, "end_time", 30)}
+                      >
+                        +
+                      </Button>
+                    </div>
 
                     {/* Duration Badge */}
                     {duration && (
-                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                      <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${colors.text}`}>
                         ⏱️ {duration}
                       </span>
                     )}
@@ -354,7 +523,7 @@ export default function SlotEditor({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive ml-auto"
                         onClick={() => removeRange(index, rangeIndex)}
                         aria-label="Remove shift range"
                       >
