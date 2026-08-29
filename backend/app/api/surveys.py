@@ -105,6 +105,7 @@ async def create_survey(
     consultation_fee_bdt: Annotated[int, Form()],
     slots: Annotated[str, Form()],
     phones: Annotated[str, Form()],
+    has_emergency_service: Annotated[bool, Form()] = False,
     nameplate: Annotated[UploadFile | None, File()] = None,
     city: Annotated[str | None, Form()] = None,
     district: Annotated[str | None, Form()] = None,
@@ -121,6 +122,7 @@ async def create_survey(
     try:
         payload = SurveyCreate(
             hospital_name=hospital_name,
+            has_emergency_service=has_emergency_service,
             city=city,
             district=district,
             latitude=latitude,
@@ -153,6 +155,7 @@ async def create_survey(
     row = ChamberSurvey(
         user_id=user.id,
         hospital_name=payload.hospital_name,
+        has_emergency_service=payload.has_emergency_service,
         city=payload.city,
         district=payload.district,
         latitude=payload.latitude,

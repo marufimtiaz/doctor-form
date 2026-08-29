@@ -53,6 +53,7 @@ export const slotSchema = z.object({
 export const surveySchema = z
   .object({
     hospital_name: z.string().trim().min(1, "Hospital name is required.").max(200),
+    has_emergency_service: z.boolean().default(false),
 
     city: z.string().max(100).default(""),
     district: z.string().max(100).default(""),
@@ -142,6 +143,7 @@ export const emptySlot = () => ({
 
 export const emptySurveyValues = (): SurveyForm => ({
   hospital_name: "",
+  has_emergency_service: false,
   city: "",
   district: "",
   latitude: "",

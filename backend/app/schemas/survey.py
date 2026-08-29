@@ -31,6 +31,7 @@ class SlotRead(BaseModel):
 
 class SurveyCreate(BaseModel):
     hospital_name: str = Field(min_length=1, max_length=200)
+    has_emergency_service: bool = Field(default=False)
 
     city: str | None = Field(default=None, max_length=100)
     district: str | None = Field(default=None, max_length=100)
@@ -80,6 +81,7 @@ class SurveyRead(BaseModel):
     id: UUID
     user_id: UUID
     hospital_name: str
+    has_emergency_service: bool = False
     city: str | None
     district: str | None
     latitude: float | None

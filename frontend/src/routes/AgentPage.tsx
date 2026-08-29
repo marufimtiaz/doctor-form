@@ -91,6 +91,7 @@ export default function AgentPage() {
     const parsed = surveySchema.parse(values);
     const body = new FormData();
     body.set("hospital_name", parsed.hospital_name);
+    body.set("has_emergency_service", String(parsed.has_emergency_service));
     body.set("daily_patients", String(parsed.daily_patients));
     body.set("avg_duration_min", String(parsed.avg_duration_min));
     body.set("consultation_fee_bdt", String(parsed.consultation_fee_bdt));
@@ -172,6 +173,41 @@ export default function AgentPage() {
                     <FormLabel>Hospital name</FormLabel>
                     <FormControl>
                       <Input maxLength={200} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="has_emergency_service"
+                render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-sm font-medium">
+                      Emergency Service (12am afterwards)
+                    </FormLabel>
+                    <FormControl>
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <Button
+                          type="button"
+                          variant={field.value ? "default" : "outline"}
+                          size="sm"
+                          className="h-8 px-4 text-xs font-semibold"
+                          onClick={() => field.onChange(true)}
+                        >
+                          Yes
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={!field.value ? "default" : "outline"}
+                          size="sm"
+                          className="h-8 px-4 text-xs font-semibold"
+                          onClick={() => field.onChange(false)}
+                        >
+                          No
+                        </Button>
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -288,7 +324,14 @@ export default function AgentPage() {
                 <Card>
                   <CardContent className="space-y-1 p-4 text-sm">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <span className="font-medium">{s.hospital_name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{s.hospital_name}</span>
+                        {s.has_emergency_service && (
+                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700 dark:bg-red-950 dark:text-red-300">
+                            🚨 Emergency Service
+                          </span>
+                        )}
+                      </div>
                       <time className="text-xs text-muted-foreground">
                         {new Date(s.created_at).toLocaleString()}
                       </time>

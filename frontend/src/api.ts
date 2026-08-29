@@ -16,6 +16,7 @@ export interface Survey {
   id: string;
   user_id: string;
   hospital_name: string;
+  has_emergency_service: boolean;
   city: string | null;
   district: string | null;
   latitude: number | null;

@@ -32,6 +32,7 @@ class ChamberSurvey(SQLModel, table=True):
     user_id: UUID = Field(foreign_key="users.id", index=True)
 
     hospital_name: str = Field(index=True, max_length=200)
+    has_emergency_service: bool = Field(default=False)
     city: str | None = Field(default=None, index=True, max_length=100)
     district: str | None = Field(default=None, index=True, max_length=100)
     latitude: float | None = Field(default=None)
