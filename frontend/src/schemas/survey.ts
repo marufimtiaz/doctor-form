@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { EVENING_CHAMBER } from "@/lib/shifts";
+
 /** Text inputs give strings; the API wants numbers. Coercing here keeps the
  *  form fields plain and the parsed output correctly typed. */
 const blankToUndefined = (value: unknown) =>
@@ -14,21 +16,46 @@ const numeric = (
   return z.preprocess(blankToUndefined, num);
 };
 
-export const slotSchema = z
+export const DAY_NAMES = [
+  "Sat",
+  "Sun",
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+] as const;
+export type DayName = (typeof DAY_NAMES)[number];
+
+export const DAY_NAME_TO_INT: Record<DayName, number> = {
+  Sat: 5,
+  Sun: 6,
+  Mon: 0,
+  Tue: 1,
+  Wed: 2,
+  Thu: 3,
+  Fri: 4,
+};
+
+export const timeRangeSchema = z
   .object({
-    // 0=Monday .. 6=Sunday, matching the backend and datetime.weekday().
-    day_of_week: z.coerce.number().int().min(0).max(6),
     start_time: z.string().min(1, "Start time is required."),
     end_time: z.string().min(1, "End time is required."),
   })
-  .refine((slot) => slot.end_time > slot.start_time, {
+  .refine((range) => range.end_time > range.start_time, {
     message: "End must be after start.",
     path: ["end_time"],
   });
 
+export const slotSchema = z.object({
+  days: z.array(z.enum(DAY_NAMES)).min(1, "Select at least one day."),
+  ranges: z.array(timeRangeSchema).min(1, "Add at least one time range."),
+});
+
 export const surveySchema = z
   .object({
     hospital_name: z.string().trim().min(1, "Hospital name is required.").max(200),
+    has_emergency_service: z.boolean().default(false),
 
     city: z.string().max(100).default(""),
     district: z.string().max(100).default(""),
@@ -95,15 +122,30 @@ export const surveySchema = z
   });
 
 export type SurveyForm = z.input<typeof surveySchema>;
+export type SurveyOutput = z.output<typeof surveySchema>;
+
+export function toBackendSlots(
+  slots: z.infer<typeof slotSchema>[],
+): { day_of_week: number; start_time: string; end_time: string }[] {
+  return slots.flatMap((slot) =>
+    slot.days.flatMap((day) =>
+      slot.ranges.map((range) => ({
+        day_of_week: DAY_NAME_TO_INT[day],
+        start_time: range.start_time,
+        end_time: range.end_time,
+      })),
+    ),
+  );
+}
 
 export const emptySlot = () => ({
-  day_of_week: 5, // Saturday - the usual first working day here.
-  start_time: "17:00",
-  end_time: "20:00",
+  days: ["Sat"] as DayName[],
+  ranges: [{ ...EVENING_CHAMBER }],
 });
 
 export const emptySurveyValues = (): SurveyForm => ({
   hospital_name: "",
+  has_emergency_service: false,
   city: "",
   district: "",
   latitude: "",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { emptySlot, surveySchema } from "./survey";
+import { emptySlot, surveySchema, toBackendSlots } from "./survey";
 
 /** A valid form, minus location - each test supplies its own. */
 const base = {
@@ -69,20 +69,47 @@ describe("location", () => {
 describe("slots", () => {
   const withCity = { city: "Dhaka", district: "Dhanmondi" };
 
-  it("requires at least one", () => {
+  it("requires at least one slot group", () => {
     expect(parse({ ...withCity, slots: [] }).success).toBe(false);
   });
 
-  it("rejects an end at or before the start", () => {
-    const slots = [{ day_of_week: 5, start_time: "20:00", end_time: "17:00" }];
+  it("requires at least one day and one range per slot group", () => {
+    const slots = [{ days: [], ranges: [] }];
+    expect(parse({ ...withCity, slots }).success).toBe(false);
+  });
+
+  it("flattens multi-day and multi-range slot groups into backend integer slot items", () => {
+    const slots = [
+      {
+        days: ["Sat", "Sun"],
+        ranges: [
+          { start_time: "09:00", end_time: "12:00" },
+          { start_time: "17:00", end_time: "20:00" },
+        ],
+      },
+    ];
+    const result = parse({ ...withCity, slots });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(toBackendSlots(result.data.slots)).toEqual([
+        { day_of_week: 5, start_time: "09:00", end_time: "12:00" },
+        { day_of_week: 5, start_time: "17:00", end_time: "20:00" },
+        { day_of_week: 6, start_time: "09:00", end_time: "12:00" },
+        { day_of_week: 6, start_time: "17:00", end_time: "20:00" },
+      ]);
+    }
+  });
+
+  it("rejects an end time at or before the start time in any range", () => {
+    const slots = [
+      {
+        days: ["Sat"],
+        ranges: [{ start_time: "20:00", end_time: "17:00" }],
+      },
+    ];
     expect(messages(parse({ ...withCity, slots }))).toContain(
       "End must be after start.",
     );
-  });
-
-  it("rejects a day outside 0-6", () => {
-    const slots = [{ day_of_week: 7, start_time: "17:00", end_time: "20:00" }];
-    expect(parse({ ...withCity, slots }).success).toBe(false);
   });
 });
 

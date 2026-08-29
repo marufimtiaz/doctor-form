@@ -39,7 +39,9 @@ import { describePlace, describeSlot } from "@/lib/formatters";
 import {
   emptySurveyValues,
   surveySchema,
+  toBackendSlots,
   type SurveyForm,
+  type SurveyOutput,
 } from "@/schemas/survey";
 
 export default function AgentPage() {
@@ -57,7 +59,7 @@ export default function AgentPage() {
   // coordinates for the first one only.
   const [resetKey, setResetKey] = useState(0);
 
-  const form = useForm<SurveyForm>({
+  const form = useForm<SurveyForm, unknown, SurveyOutput>({
     resolver: zodResolver(surveySchema),
     defaultValues: emptySurveyValues(),
   });
@@ -89,13 +91,14 @@ export default function AgentPage() {
     const parsed = surveySchema.parse(values);
     const body = new FormData();
     body.set("hospital_name", parsed.hospital_name);
+    body.set("has_emergency_service", String(parsed.has_emergency_service));
     body.set("daily_patients", String(parsed.daily_patients));
     body.set("avg_duration_min", String(parsed.avg_duration_min));
     body.set("consultation_fee_bdt", String(parsed.consultation_fee_bdt));
     // Multipart cannot nest, so these travel as JSON strings. Phones are
     // objects in the form because useFieldArray requires objects; the API
     // wants bare strings.
-    body.set("slots", JSON.stringify(parsed.slots));
+    body.set("slots", JSON.stringify(toBackendSlots(parsed.slots)));
     body.set("phones", JSON.stringify(parsed.phones.map((p) => p.value)));
     body.set("nameplate", nameplate);
     if (parsed.city.trim()) body.set("city", parsed.city.trim());
@@ -176,6 +179,41 @@ export default function AgentPage() {
                 )}
               />
 
+              <FormField
+                control={form.control}
+                name="has_emergency_service"
+                render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-sm font-medium">
+                      Emergency Service (12am afterwards)
+                    </FormLabel>
+                    <FormControl>
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <Button
+                          type="button"
+                          variant={field.value ? "default" : "outline"}
+                          size="sm"
+                          className="h-8 px-4 text-xs font-semibold"
+                          onClick={() => field.onChange(true)}
+                        >
+                          Yes
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={!field.value ? "default" : "outline"}
+                          size="sm"
+                          className="h-8 px-4 text-xs font-semibold"
+                          onClick={() => field.onChange(false)}
+                        >
+                          No
+                        </Button>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <LocationInput
                 key={resetKey}
                 control={form.control}
@@ -192,7 +230,11 @@ export default function AgentPage() {
                 }}
                 error={nameplateError}
               />
-              <SlotEditor control={form.control} />
+              <SlotEditor
+                control={form.control}
+                setValue={form.setValue}
+                getValues={form.getValues}
+              />
               <PhoneEditor control={form.control} />
 
               <div className="grid gap-4 sm:grid-cols-3">
@@ -286,7 +328,14 @@ export default function AgentPage() {
                 <Card>
                   <CardContent className="space-y-1 p-4 text-sm">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <span className="font-medium">{s.hospital_name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{s.hospital_name}</span>
+                        {s.has_emergency_service && (
+                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700 dark:bg-red-950 dark:text-red-300">
+                            🚨 Emergency Service
+                          </span>
+                        )}
+                      </div>
                       <time className="text-xs text-muted-foreground">
                         {new Date(s.created_at).toLocaleString()}
                       </time>
