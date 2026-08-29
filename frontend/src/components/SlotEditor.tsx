@@ -1,5 +1,5 @@
 import { AlertTriangle, Plus, Trash2, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   useFieldArray,
   useWatch,
@@ -206,49 +206,6 @@ function findFarthestFreeSlot(ranges: Array<{ start_time: string; end_time: stri
   return { start: `${sh}:${sm}`, end: `${eh}:${em}` };
 }
 
-function DayChips({
-  value = [],
-  onChange,
-}: {
-  value: DayName[];
-  onChange: (next: DayName[]) => void;
-}) {
-  const [localDays, setLocalDays] = useState<DayName[]>(value);
-
-  useEffect(() => {
-    setLocalDays(value);
-  }, [value]);
-
-  const handleToggle = (day: DayName) => {
-    const exists = localDays.includes(day);
-    const next = exists
-      ? localDays.filter((d) => d !== day)
-      : [...localDays, day];
-    setLocalDays(next);
-    onChange(next);
-  };
-
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {DAY_NAMES.map((day) => {
-        const isSelected = localDays.includes(day);
-        return (
-          <Button
-            key={day}
-            type="button"
-            variant={isSelected ? "default" : "outline"}
-            size="sm"
-            className="h-8 px-3 text-xs font-medium touch-manipulation select-none active:scale-95 transition-transform duration-75"
-            onClick={() => handleToggle(day)}
-          >
-            {day}
-          </Button>
-        );
-      })}
-    </div>
-  );
-}
-
 export default function SlotEditor({
   control,
   setValue,
@@ -403,20 +360,44 @@ export default function SlotEditor({
             <FormField
               control={control}
               name={`slots.${index}.days`}
-              render={({ field: daysField }) => (
-                <FormItem className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Select Days:
-                  </span>
-                  <DayChips
-                    value={daysField.value || []}
-                    onChange={(nextDays) => {
-                      daysField.onChange(nextDays);
-                    }}
-                  />
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field: daysField }) => {
+                const selectedDays = daysField.value || [];
+                const toggleDay = (day: DayName) => {
+                  const exists = selectedDays.includes(day);
+                  const next = exists
+                    ? selectedDays.filter((d) => d !== day)
+                    : [...selectedDays, day];
+                  daysField.onChange(next);
+                };
+
+                return (
+                  <FormItem className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Select Days:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {DAY_NAMES.map((day) => {
+                        const isSelected = selectedDays.includes(day);
+                        return (
+                          <button
+                            key={day}
+                            type="button"
+                            className={`h-8 px-3 text-xs font-medium rounded-md border transition-none touch-manipulation select-none active:scale-95 ${
+                              isSelected
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-background text-foreground border-input hover:bg-accent"
+                            }`}
+                            onClick={() => toggleDay(day)}
+                          >
+                            {day}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             {/* Timeline Track Container */}
