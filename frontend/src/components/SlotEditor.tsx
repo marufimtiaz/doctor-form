@@ -108,6 +108,10 @@ function percentToTime(percent: number): string {
   return `${h}:${m}`;
 }
 
+function sortRanges(ranges: Array<{ start_time: string; end_time: string }>) {
+  return [...ranges].sort((a, b) => a.start_time.localeCompare(b.start_time));
+}
+
 function findOverlaps(ranges: Array<{ start_time: string; end_time: string }>) {
   const overlaps: string[] = [];
   for (let i = 0; i < ranges.length; i++) {
@@ -126,7 +130,7 @@ function findOverlaps(ranges: Array<{ start_time: string; end_time: string }>) {
 }
 
 function findFarthestFreeSlot(ranges: Array<{ start_time: string; end_time: string }>): { start: string; end: string } | null {
-  const totalSlots = 32; // (24 - 8) * 2
+  const totalSlots = 32;
   const isOccupied = new Array(totalSlots).fill(false);
 
   ranges.forEach((r) => {
@@ -226,36 +230,33 @@ export default function SlotEditor({
     });
   };
 
+  const updateSortedRanges = (slotIndex: number, ranges: Array<{ start_time: string; end_time: string }>) => {
+    const sorted = sortRanges(ranges);
+    setValue(`slots.${slotIndex}.ranges`, sorted, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+  };
+
   const addSmartHandle = (slotIndex: number) => {
     const currentRanges = slotsValue?.[slotIndex]?.ranges || [];
     if (currentRanges.length >= 2) return;
     const freeSlot = findFarthestFreeSlot(currentRanges);
     if (!freeSlot) return;
-    setValue(
-      `slots.${slotIndex}.ranges`,
-      [...currentRanges, { start_time: freeSlot.start, end_time: freeSlot.end }],
-      { shouldValidate: true, shouldDirty: true },
-    );
+    updateSortedRanges(slotIndex, [...currentRanges, { start_time: freeSlot.start, end_time: freeSlot.end }]);
   };
 
   const addRange = (slotIndex: number, start = "17:00", end = "20:00") => {
     const currentRanges = slotsValue?.[slotIndex]?.ranges || [];
-    if (currentRanges.length >= 2) return; // Enforce max 2 shifts
-    setValue(
-      `slots.${slotIndex}.ranges`,
-      [...currentRanges, { start_time: start, end_time: end }],
-      { shouldValidate: true, shouldDirty: true },
-    );
+    if (currentRanges.length >= 2) return;
+    updateSortedRanges(slotIndex, [...currentRanges, { start_time: start, end_time: end }]);
   };
 
   const removeRange = (slotIndex: number, rangeIndex: number) => {
     const currentRanges = slotsValue?.[slotIndex]?.ranges || [];
     if (currentRanges.length <= 1) return;
-    setValue(
-      `slots.${slotIndex}.ranges`,
-      currentRanges.filter((_, i) => i !== rangeIndex),
-      { shouldValidate: true, shouldDirty: true },
-    );
+    const remaining = currentRanges.filter((_, i) => i !== rangeIndex);
+    updateSortedRanges(slotIndex, remaining);
   };
 
   const handlePointerDrag = (
@@ -274,7 +275,8 @@ export default function SlotEditor({
       const pct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
       const nextTime = percentToTime(pct);
 
-      const currentRange = slotsValue?.[slotIndex]?.ranges?.[rangeIndex];
+      const currentRanges = [...(slotsValue?.[slotIndex]?.ranges || [])];
+      const currentRange = currentRanges[rangeIndex];
       if (!currentRange) return;
 
       if (field === "start_time" && currentRange.end_time && nextTime >= currentRange.end_time) {
@@ -284,10 +286,8 @@ export default function SlotEditor({
         return;
       }
 
-      setValue(`slots.${slotIndex}.ranges.${rangeIndex}.${field}`, nextTime, {
-        shouldValidate: true,
-        shouldDirty: true,
-      });
+      currentRanges[rangeIndex] = { ...currentRange, [field]: nextTime };
+      updateSortedRanges(slotIndex, currentRanges);
     };
 
     updateFromPointer(e);
@@ -410,9 +410,8 @@ export default function SlotEditor({
               )}
             />
 
-            {/* 8 AM - 12 AM Timeline Track Container */}
+            {/* Timeline Track Container */}
             <div className="space-y-2 rounded-md bg-muted/40 p-2.5 sm:p-3">
-              {/* Header Row with Title & Handle Pair Button */}
               <div className="flex items-center justify-between gap-2 border-b border-muted pb-1.5">
                 <span className="text-[11px] font-semibold text-muted-foreground">
                   Timeline Track (8 AM – 12 AM)
@@ -436,7 +435,6 @@ export default function SlotEditor({
                 </Button>
               </div>
 
-              {/* Time Labels Spanning 8 AM to 12 AM (Midnight) */}
               <div className="flex justify-between text-[10px] font-medium text-muted-foreground w-full px-0.5">
                 <span>8 AM</span>
                 <span>12 PM</span>
@@ -445,14 +443,12 @@ export default function SlotEditor({
                 <span>12 AM</span>
               </div>
 
-              {/* Timeline Track */}
               <div
                 ref={(el) => {
                   timelineRefs.current[index] = el;
                 }}
                 className="relative h-6 w-full rounded-full bg-muted border select-none touch-none"
               >
-                {/* 30-min tick marks (32 slots) */}
                 {Array.from({ length: 33 }).map((_, i) => (
                   <div
                     key={i}
@@ -465,7 +461,6 @@ export default function SlotEditor({
                   />
                 ))}
 
-                {/* Color-Coded Segments & Sleek Drag Knobs */}
                 {currentRanges.map((range, rIdx) => {
                   const left = timeToPercent(range.start_time);
                   const right = timeToPercent(range.end_time);
@@ -483,7 +478,6 @@ export default function SlotEditor({
                       }`}
                       style={{ left: `${left}%`, width: `${width}%` }}
                     >
-                      {/* Left Drag Handle Knob */}
                       <div
                         onPointerDown={(e) =>
                           handlePointerDrag(e, index, rIdx, "start_time")
@@ -494,12 +488,11 @@ export default function SlotEditor({
                         <div className="w-0.5 h-3 bg-primary/80 rounded-full" />
                       </div>
 
-                      {/* Right Drag Handle Knob */}
                       <div
                         onPointerDown={(e) =>
                           handlePointerDrag(e, index, rIdx, "end_time")
                         }
-                        className="absolute -right-2.5 top-1/2 -translate-y-1/2 w-4 h-7 bg-background border-2 border-primary rounded-full shadow-md cursor-ew-resize hover:scale-110 active:scale-125 z-20 flex items-center justify-center touch-none"
+                        className="absolute -right-2.5 top-1/2 -translate-y-1/2 w-4 h-7 bg-background border-2 border-primary rounded-md shadow-md cursor-ew-resize hover:scale-110 active:scale-125 z-20 flex items-center justify-center touch-none"
                         title={`Drag End Time (${range.end_time})`}
                       >
                         <div className="w-0.5 h-3 bg-primary/80 rounded-full" />
@@ -520,7 +513,7 @@ export default function SlotEditor({
               </Alert>
             )}
 
-            {/* Ultra-Clean, Non-Bloated Shift Rows */}
+            {/* Shift Rows with Chronological Auto-Sort */}
             <div className="space-y-2">
               <span className="text-xs font-medium text-muted-foreground">
                 Time Shift Ranges:
@@ -535,6 +528,12 @@ export default function SlotEditor({
                   hoveredShift?.groupIndex === index &&
                   hoveredShift?.rangeIndex === rangeIndex;
 
+                const handleTimeChange = (field: "start_time" | "end_time", value: string) => {
+                  const updated = [...currentRanges];
+                  updated[rangeIndex] = { ...updated[rangeIndex], [field]: value };
+                  updateSortedRanges(index, updated);
+                };
+
                 return (
                   <div
                     key={rangeIndex}
@@ -546,7 +545,6 @@ export default function SlotEditor({
                       isHovered ? "ring-2 ring-primary/40 shadow-sm" : ""
                     }`}
                   >
-                    {/* Header Row: Shift Title + Duration Badge + Delete Icon */}
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-bold">
                         Shift {rangeIndex + 1}:
@@ -572,7 +570,6 @@ export default function SlotEditor({
                       </div>
                     </div>
 
-                    {/* Inputs Row: Full-width responsive start/end selects */}
                     <div className="flex items-center gap-2">
                       <FormField
                         control={control}
@@ -581,7 +578,7 @@ export default function SlotEditor({
                           <FormItem className="m-0 flex-1 min-w-0">
                             <Select
                               value={start.value}
-                              onValueChange={start.onChange}
+                              onValueChange={(val) => handleTimeChange("start_time", val)}
                             >
                               <FormControl>
                                 <SelectTrigger className="h-8 w-full text-xs font-medium bg-background">
@@ -613,7 +610,7 @@ export default function SlotEditor({
                           <FormItem className="m-0 flex-1 min-w-0">
                             <Select
                               value={end.value}
-                              onValueChange={end.onChange}
+                              onValueChange={(val) => handleTimeChange("end_time", val)}
                             >
                               <FormControl>
                                 <SelectTrigger className="h-8 w-full text-xs font-medium bg-background">
@@ -640,7 +637,6 @@ export default function SlotEditor({
                 );
               })}
 
-              {/* Bottom Presets & Add Shift Range (ONLY SHOWN IF < 2 SHIFTS) */}
               {currentRanges.length < 2 ? (
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                   <div className="flex flex-wrap gap-1">
