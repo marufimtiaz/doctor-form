@@ -36,14 +36,6 @@ const PRESETS: { label: string; days: DayName[] }[] = [
   { label: "All Days", days: ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"] },
 ];
 
-// Presets with ZERO time overlap
-const SHIFT_PRESETS = [
-  { label: "Morning (9 AM–1 PM)", start: "09:00", end: "13:00" },
-  { label: "Afternoon (2 PM–5 PM)", start: "14:00", end: "17:00" },
-  { label: "Evening (5 PM–8 PM)", start: "17:00", end: "20:00" },
-  { label: "Night (8 PM–11 PM)", start: "20:00", end: "23:00" },
-];
-
 // 30-minute interval options (06:00 to 24:00)
 const TIME_OPTIONS: { value: string; label: string }[] = [];
 for (let hour = 6; hour <= 24; hour++) {
@@ -263,12 +255,6 @@ export default function SlotEditor({
     const freeSlot = findFarthestFreeSlot(currentRanges);
     if (!freeSlot) return;
     updateSortedRanges(slotIndex, [...currentRanges, { start_time: freeSlot.start, end_time: freeSlot.end }]);
-  };
-
-  const addRange = (slotIndex: number, start = "17:00", end = "20:00") => {
-    const currentRanges = slotsValue?.[slotIndex]?.ranges || [];
-    if (currentRanges.length >= 2) return;
-    updateSortedRanges(slotIndex, [...currentRanges, { start_time: start, end_time: end }]);
   };
 
   const removeRange = (slotIndex: number, rangeIndex: number) => {
@@ -505,39 +491,6 @@ export default function SlotEditor({
                   );
                 })}
               </div>
-
-              {/* Preset Chips directly under the timeline bar */}
-              {currentRanges.length < 2 ? (
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-muted/50">
-                  <div className="flex flex-wrap gap-1">
-                    {SHIFT_PRESETS.map((preset) => (
-                      <Button
-                        key={preset.label}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-[11px] bg-background"
-                        onClick={() => addRange(index, preset.start, preset.end)}
-                      >
-                        + {preset.label}
-                      </Button>
-                    ))}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="h-7 px-3 text-xs"
-                    onClick={() => addRange(index)}
-                  >
-                    <Plus className="mr-1 size-3.5" aria-hidden /> Add Shift Range
-                  </Button>
-                </div>
-              ) : (
-                <div className="text-[11px] font-medium text-muted-foreground pt-1.5 border-t border-muted/50 italic text-center sm:text-left">
-                  ✓ Maximum 2 shift ranges added for this group.
-                </div>
-              )}
             </div>
 
             {/* Overlap Conflict Warning Alert */}
