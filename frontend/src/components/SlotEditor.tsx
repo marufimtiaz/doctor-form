@@ -1,4 +1,4 @@
-import { AlertTriangle, Clock, Plus, Trash2, Users, X } from "lucide-react";
+import { AlertTriangle, Plus, Trash2, X } from "lucide-react";
 import { useRef, useState } from "react";
 import {
   useFieldArray,
@@ -223,33 +223,12 @@ export default function SlotEditor({
 }) {
   const { fields, append, remove } = useFieldArray({ control, name: "slots" });
   const slotsValue = useWatch({ control, name: "slots" });
-  const avgDuration = useWatch({ control, name: "avg_duration_min" });
   const [hoveredShift, setHoveredShift] = useState<{
     groupIndex: number;
     rangeIndex: number;
   } | null>(null);
 
   const timelineRefs = useRef<Record<number, HTMLDivElement | null>>({});
-
-  const activeDaysSet = new Set<DayName>();
-  let totalWeeklyMins = 0;
-
-  (slotsValue || []).forEach((slot) => {
-    const daysCount = slot.days?.length || 0;
-    (slot.days || []).forEach((d) => activeDaysSet.add(d));
-    (slot.ranges || []).forEach((r) => {
-      if (r.start_time && r.end_time && r.end_time > r.start_time) {
-        const [sh, sm] = r.start_time.split(":").map(Number);
-        const [eh, em] = r.end_time.split(":").map(Number);
-        const durationMins = eh * 60 + em - (sh * 60 + sm);
-        totalWeeklyMins += durationMins * daysCount;
-      }
-    });
-  });
-
-  const totalWeeklyHours = (totalWeeklyMins / 60).toFixed(1).replace(/\.0$/, "");
-  const durationNum = Number(avgDuration) || 10;
-  const estimatedCapacity = Math.floor(totalWeeklyMins / durationNum);
 
   const toggleDay = (slotIndex: number, day: DayName) => {
     const currentDays = slotsValue?.[slotIndex]?.days || [];
@@ -347,26 +326,8 @@ export default function SlotEditor({
 
   return (
     <fieldset className="space-y-6 rounded-lg border p-3 sm:p-4 bg-card">
-      {/* Header Summary Badges Bar */}
-      <div className="space-y-2 border-b pb-3">
-        <div className="flex items-center justify-between">
-          <Label className="text-sm sm:text-base font-bold">Availability Schedule</Label>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs">
-          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 font-semibold text-primary">
-            <Clock className="size-3.5" />
-            {totalWeeklyHours} hrs/week
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 font-semibold text-secondary-foreground">
-            🗓️ {activeDaysSet.size} active day{activeDaysSet.size !== 1 ? "s" : ""}
-          </span>
-          {estimatedCapacity > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-              <Users className="size-3.5" />
-              ~{estimatedCapacity} max patients/week
-            </span>
-          )}
-        </div>
+      <div className="flex items-center justify-between border-b pb-3">
+        <Label className="text-sm sm:text-base font-bold">Availability Schedule</Label>
       </div>
 
       {fields.map((field, index) => {
