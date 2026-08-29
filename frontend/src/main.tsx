@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 
 import App from "@/App";
 import { AuthProvider } from "@/auth";
+import { HospitalProvider } from "@/hospital";
 import "./index.css";
 
 const root = document.getElementById("root");
@@ -21,7 +22,9 @@ createRoot(root).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <App />
+        <HospitalProvider>
+          <App />
+        </HospitalProvider>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,
