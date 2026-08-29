@@ -107,6 +107,7 @@ async def test_inline_failure_never_loses_the_survey(
 
 async def test_off_mode_starts_no_background_worker(off_mode):
     from asgi_lifespan import LifespanManager
+
     from app.main import app
 
     async with LifespanManager(app):
