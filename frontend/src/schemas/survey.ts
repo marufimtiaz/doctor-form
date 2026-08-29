@@ -35,16 +35,20 @@ export const DAY_NAME_TO_INT: Record<DayName, number> = {
   Fri: 4,
 };
 
-export const slotSchema = z
+export const timeRangeSchema = z
   .object({
-    days: z.array(z.enum(DAY_NAMES)).min(1, "Select at least one day."),
     start_time: z.string().min(1, "Start time is required."),
     end_time: z.string().min(1, "End time is required."),
   })
-  .refine((slot) => slot.end_time > slot.start_time, {
+  .refine((range) => range.end_time > range.start_time, {
     message: "End must be after start.",
     path: ["end_time"],
   });
+
+export const slotSchema = z.object({
+  days: z.array(z.enum(DAY_NAMES)).min(1, "Select at least one day."),
+  ranges: z.array(timeRangeSchema).min(1, "Add at least one time range."),
+});
 
 export const surveySchema = z
   .object({
@@ -120,19 +124,20 @@ export type SurveyOutput = z.output<typeof surveySchema>;
 export function toBackendSlots(
   slots: z.infer<typeof slotSchema>[],
 ): { day_of_week: number; start_time: string; end_time: string }[] {
-  return slots.flatMap((s) =>
-    s.days.map((day) => ({
-      day_of_week: DAY_NAME_TO_INT[day],
-      start_time: s.start_time,
-      end_time: s.end_time,
-    })),
+  return slots.flatMap((slot) =>
+    slot.days.flatMap((day) =>
+      slot.ranges.map((range) => ({
+        day_of_week: DAY_NAME_TO_INT[day],
+        start_time: range.start_time,
+        end_time: range.end_time,
+      })),
+    ),
   );
 }
 
 export const emptySlot = () => ({
   days: ["Sat"] as DayName[],
-  start_time: "17:00",
-  end_time: "20:00",
+  ranges: [{ start_time: "17:00", end_time: "20:00" }],
 });
 
 export const emptySurveyValues = (): SurveyForm => ({
