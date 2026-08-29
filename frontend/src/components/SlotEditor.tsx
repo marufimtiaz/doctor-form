@@ -542,27 +542,49 @@ export default function SlotEditor({
                       setHoveredShift({ groupIndex: index, rangeIndex })
                     }
                     onMouseLeave={() => setHoveredShift(null)}
-                    className={`flex flex-wrap items-center justify-between gap-2 p-2 rounded-md bg-card border-l-4 ${colors.border} ${
+                    className={`space-y-2 p-2.5 rounded-md bg-card border-l-4 ${colors.border} ${
                       isHovered ? "ring-2 ring-primary/40 shadow-sm" : ""
                     }`}
                   >
-                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                      <span className="font-bold min-w-12">
+                    {/* Header Row: Shift Title + Duration Badge + Delete Icon */}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold">
                         Shift {rangeIndex + 1}:
                       </span>
+                      <div className="flex items-center gap-1.5 ml-auto">
+                        {duration && (
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${colors.text}`}>
+                            ⏱️ {duration}
+                          </span>
+                        )}
+                        {currentRanges.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                            onClick={() => removeRange(index, rangeIndex)}
+                            aria-label="Remove shift range"
+                          >
+                            <Trash2 className="size-3.5" aria-hidden />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
 
-                      {/* Start Time Select */}
+                    {/* Inputs Row: Full-width responsive start/end selects */}
+                    <div className="flex items-center gap-2">
                       <FormField
                         control={control}
                         name={`slots.${index}.ranges.${rangeIndex}.start_time`}
                         render={({ field: start }) => (
-                          <FormItem className="m-0">
+                          <FormItem className="m-0 flex-1 min-w-0">
                             <Select
                               value={start.value}
                               onValueChange={start.onChange}
                             >
                               <FormControl>
-                                <SelectTrigger className="h-8 w-28 text-xs font-medium bg-background">
+                                <SelectTrigger className="h-8 w-full text-xs font-medium bg-background">
                                   <SelectValue placeholder="Start Time" />
                                 </SelectTrigger>
                               </FormControl>
@@ -582,20 +604,19 @@ export default function SlotEditor({
                         )}
                       />
 
-                      <span className="text-xs text-muted-foreground">to</span>
+                      <span className="text-xs font-medium text-muted-foreground shrink-0">to</span>
 
-                      {/* End Time Select */}
                       <FormField
                         control={control}
                         name={`slots.${index}.ranges.${rangeIndex}.end_time`}
                         render={({ field: end }) => (
-                          <FormItem className="m-0">
+                          <FormItem className="m-0 flex-1 min-w-0">
                             <Select
                               value={end.value}
                               onValueChange={end.onChange}
                             >
                               <FormControl>
-                                <SelectTrigger className="h-8 w-28 text-xs font-medium bg-background">
+                                <SelectTrigger className="h-8 w-full text-xs font-medium bg-background">
                                   <SelectValue placeholder="End Time" />
                                 </SelectTrigger>
                               </FormControl>
@@ -614,29 +635,6 @@ export default function SlotEditor({
                           </FormItem>
                         )}
                       />
-                    </div>
-
-                    <div className="flex items-center gap-2 ml-auto">
-                      {/* Duration Badge */}
-                      {duration && (
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${colors.text}`}>
-                          ⏱️ {duration}
-                        </span>
-                      )}
-
-                      {/* Delete Range Button */}
-                      {currentRanges.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          onClick={() => removeRange(index, rangeIndex)}
-                          aria-label="Remove shift range"
-                        >
-                          <Trash2 className="size-3.5" aria-hidden />
-                        </Button>
-                      )}
                     </div>
                   </div>
                 );
