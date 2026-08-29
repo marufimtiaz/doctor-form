@@ -3,7 +3,7 @@ import json
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import ValidationError
 from sqlalchemy import func
 from sqlmodel import select
@@ -18,6 +18,7 @@ from app.models.survey import ChamberSurvey
 from app.models.survey_phone import SurveyPhone
 from app.schemas.survey import SlotRead, StatsRead, SurveyCreate, SurveyRead
 from app.services import storage
+from app.services.ocr import DoctorFields, OcrError, extract_doctor_fields
 
 router = APIRouter(prefix="/surveys", tags=["surveys"])
 
@@ -53,6 +54,35 @@ def _parse_json_field(raw: str, field: str) -> object:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY, f"{field} must be valid JSON"
         ) from exc
+
+
+# Declared with the other literal paths, above /{survey_id}.
+@router.post("/nameplate/preview", response_model=DoctorFields | None)
+async def preview_nameplate(
+    user: CurrentUser,
+    nameplate: Annotated[UploadFile, File()],
+) -> Response | DoctorFields:
+    """Read a nameplate without filing anything.
+
+    Creates no row and writes nothing to storage: the image is uploaded once, at
+    submit. A failure here is not the agent's problem - the form files the survey
+    `pending` and the worker reads it later.
+    """
+    if settings.ocr_mode == "off":
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    blob = await nameplate.read()
+    if len(blob) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"nameplate exceeds {MAX_UPLOAD_BYTES // (1024 * 1024)}MB",
+        )
+
+    content_type = storage.sniff_image_type(blob, nameplate.content_type)
+    try:
+        return await extract_doctor_fields(blob, content_type)
+    except OcrError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)[:200]) from exc
 
 
 # Declared before /{survey_id} - otherwise "stats" is parsed as a UUID.
