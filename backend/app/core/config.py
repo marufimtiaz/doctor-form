@@ -122,8 +122,8 @@ class Settings(BaseSettings):
     @field_validator("ocr_mode")
     @classmethod
     def _known_ocr_mode(cls, value: str) -> str:
-        if value not in ("worker", "inline", "off"):
-            raise ValueError("ocr_mode must be 'worker', 'inline' or 'off'")
+        if value not in ("worker", "off"):
+            raise ValueError("ocr_mode must be 'worker' or 'off'")
         return value
 
 

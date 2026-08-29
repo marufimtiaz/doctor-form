@@ -206,7 +206,6 @@ Doctor name, degrees, and specializations are extracted from uploaded nameplate 
 ### Modes (`OCR_MODE`)
 
 - `worker` (default): A background loop inside the API container polls for `pending` surveys, claims them using `SELECT FOR UPDATE SKIP LOCKED`, downloads image bytes, and calls OpenRouter.
-- `inline`: Runs directly inside the `POST /api/surveys` handler after DB commit. If extraction fails, the survey remains filed with `ocr_status="pending"` (no submitted survey is ever lost).
 - `off`: Disables in-process extraction. Useful when running the worker in a separate container (detached worker pattern).
 
 ### Detached Worker
@@ -272,7 +271,7 @@ Backend settings (env vars, see `backend/app/core/config.py`):
 | `ACCESS_TOKEN_TTL_DAYS`  | `30`                             | Token lifetime                   |
 | `ADMIN_PASSWORD`         | *(dev default; boot fails in prod)* | Seeded admin's password      |
 | `DEMO_PASSWORD`          | `demo-password`                  | Demo agents' password (dev only) |
-| `OCR_MODE`               | `worker`                         | Extraction execution mode: `worker`, `inline`, `off` |
+| `OCR_MODE`               | `worker`                         | Extraction execution mode: `worker`, `off` |
 | `OPENROUTER_API_KEY`     | *(empty)*                        | OpenRouter API key for LLM OCR extraction |
 | `OCR_MODEL`              | `google/gemma-4-31b-it`          | Model ID used for vision extraction |
 | `OCR_POLL_SECONDS`       | `10`                             | Worker polling frequency in seconds |

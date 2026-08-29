@@ -179,8 +179,3 @@ async def reread_nameplate(survey_id: UUID, session: SessionDep, _: AdminUser) -
     row.updated_at = datetime.now(UTC)
     session.add(row)
     await session.commit()
-
-    if settings.ocr_mode == "inline":
-        from app.workers.ocr import process_survey
-
-        await process_survey(row.id)
