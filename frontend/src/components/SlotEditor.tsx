@@ -1,5 +1,5 @@
 import { AlertTriangle, Plus, Trash2, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   useFieldArray,
   useWatch,
@@ -206,6 +206,49 @@ function findFarthestFreeSlot(ranges: Array<{ start_time: string; end_time: stri
   return { start: `${sh}:${sm}`, end: `${eh}:${em}` };
 }
 
+function DayChips({
+  value = [],
+  onChange,
+}: {
+  value: DayName[];
+  onChange: (next: DayName[]) => void;
+}) {
+  const [localDays, setLocalDays] = useState<DayName[]>(value);
+
+  useEffect(() => {
+    setLocalDays(value);
+  }, [value]);
+
+  const handleToggle = (day: DayName) => {
+    const exists = localDays.includes(day);
+    const next = exists
+      ? localDays.filter((d) => d !== day)
+      : [...localDays, day];
+    setLocalDays(next);
+    onChange(next);
+  };
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {DAY_NAMES.map((day) => {
+        const isSelected = localDays.includes(day);
+        return (
+          <Button
+            key={day}
+            type="button"
+            variant={isSelected ? "default" : "outline"}
+            size="sm"
+            className="h-8 px-3 text-xs font-medium touch-manipulation select-none active:scale-95 transition-transform duration-75"
+            onClick={() => handleToggle(day)}
+          >
+            {day}
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function SlotEditor({
   control,
   setValue,
@@ -221,18 +264,6 @@ export default function SlotEditor({
   } | null>(null);
 
   const timelineRefs = useRef<Record<number, HTMLDivElement | null>>({});
-
-  const toggleDay = (slotIndex: number, day: DayName) => {
-    const currentDays = slotsValue?.[slotIndex]?.days || [];
-    const exists = currentDays.includes(day);
-    const nextDays = exists
-      ? currentDays.filter((d) => d !== day)
-      : [...currentDays, day];
-    setValue(`slots.${slotIndex}.days`, nextDays, {
-      shouldValidate: false,
-      shouldDirty: true,
-    });
-  };
 
   const applyPreset = (slotIndex: number, days: DayName[]) => {
     setValue(`slots.${slotIndex}.days`, days, {
@@ -317,7 +348,6 @@ export default function SlotEditor({
       </div>
 
       {fields.map((field, index) => {
-        const currentDays = slotsValue?.[index]?.days || [];
         const currentRanges = slotsValue?.[index]?.ranges || [];
         const overlaps = findOverlaps(currentRanges);
         const freeSlotAvailable = currentRanges.length < 2 && findFarthestFreeSlot(currentRanges) !== null;
@@ -373,28 +403,17 @@ export default function SlotEditor({
             <FormField
               control={control}
               name={`slots.${index}.days`}
-              render={() => (
+              render={({ field: daysField }) => (
                 <FormItem className="space-y-1">
                   <span className="text-xs font-medium text-muted-foreground">
                     Select Days:
                   </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {DAY_NAMES.map((day) => {
-                      const isSelected = currentDays.includes(day);
-                      return (
-                        <Button
-                          key={day}
-                          type="button"
-                          variant={isSelected ? "default" : "outline"}
-                          size="sm"
-                          className="h-8 px-3 text-xs font-medium touch-manipulation select-none active:scale-95 transition-transform duration-75"
-                          onClick={() => toggleDay(index, day)}
-                        >
-                          {day}
-                        </Button>
-                      );
-                    })}
-                  </div>
+                  <DayChips
+                    value={daysField.value || []}
+                    onChange={(nextDays) => {
+                      daysField.onChange(nextDays);
+                    }}
+                  />
                   <FormMessage />
                 </FormItem>
               )}
