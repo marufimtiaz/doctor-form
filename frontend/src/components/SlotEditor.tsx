@@ -505,6 +505,39 @@ export default function SlotEditor({
                   );
                 })}
               </div>
+
+              {/* Preset Chips directly under the timeline bar */}
+              {currentRanges.length < 2 ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-muted/50">
+                  <div className="flex flex-wrap gap-1">
+                    {SHIFT_PRESETS.map((preset) => (
+                      <Button
+                        key={preset.label}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-[11px] bg-background"
+                        onClick={() => addRange(index, preset.start, preset.end)}
+                      >
+                        + {preset.label}
+                      </Button>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="h-7 px-3 text-xs"
+                    onClick={() => addRange(index)}
+                  >
+                    <Plus className="mr-1 size-3.5" aria-hidden /> Add Shift Range
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-[11px] font-medium text-muted-foreground pt-1.5 border-t border-muted/50 italic text-center sm:text-left">
+                  ✓ Maximum 2 shift ranges added for this group.
+                </div>
+              )}
             </div>
 
             {/* Overlap Conflict Warning Alert */}
@@ -517,7 +550,7 @@ export default function SlotEditor({
               </Alert>
             )}
 
-            {/* Shift Rows with Hard-Filtered Dropdown Options */}
+            {/* Shift Rows */}
             <div className="space-y-2">
               <span className="text-xs font-medium text-muted-foreground">
                 Time Shift Ranges:
@@ -643,38 +676,6 @@ export default function SlotEditor({
                   </div>
                 );
               })}
-
-              {currentRanges.length < 2 ? (
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                  <div className="flex flex-wrap gap-1">
-                    {SHIFT_PRESETS.map((preset) => (
-                      <Button
-                        key={preset.label}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-[11px]"
-                        onClick={() => addRange(index, preset.start, preset.end)}
-                      >
-                        + {preset.label}
-                      </Button>
-                    ))}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="h-7 px-3 text-xs"
-                    onClick={() => addRange(index)}
-                  >
-                    <Plus className="mr-1 size-3.5" aria-hidden /> Add Shift Range
-                  </Button>
-                </div>
-              ) : (
-                <div className="text-[11px] font-medium text-muted-foreground pt-1 italic text-center sm:text-left">
-                  ✓ Maximum 2 shift ranges added for this group.
-                </div>
-              )}
             </div>
           </div>
         );
