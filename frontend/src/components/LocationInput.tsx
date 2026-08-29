@@ -15,16 +15,16 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { SurveyForm } from "@/schemas/survey";
+import type { HospitalForm } from "@/schemas/survey";
 
 export default function LocationInput({
   control,
   setValue,
   getValues,
 }: {
-  control: Control<SurveyForm>;
-  setValue: UseFormSetValue<SurveyForm>;
-  getValues: UseFormGetValues<SurveyForm>;
+  control: Control<HospitalForm>;
+  setValue: UseFormSetValue<HospitalForm>;
+  getValues: UseFormGetValues<HospitalForm>;
 }) {
   const [geoState, setGeoState] = useState<"idle" | "asking" | "ok" | "denied">(
     "idle",

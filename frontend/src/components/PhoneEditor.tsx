@@ -10,12 +10,12 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { SurveyForm } from "@/schemas/survey";
+import type { HospitalForm } from "@/schemas/survey";
 
 export default function PhoneEditor({
   control,
 }: {
-  control: Control<SurveyForm>;
+  control: Control<HospitalForm>;
 }) {
   const { fields, append, remove } = useFieldArray({ control, name: "phones" });
 

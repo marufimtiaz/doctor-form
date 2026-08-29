@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
 import AdminPage from "@/routes/AdminPage";
-import AgentPage from "@/routes/AgentPage";
+import DoctorPage from "@/routes/DoctorPage";
+import HospitalPage from "@/routes/HospitalPage";
 import LoginPage from "@/routes/LoginPage";
 
 function Header() {
@@ -20,7 +21,7 @@ function Header() {
         <Stethoscope className="size-5 shrink-0 text-primary" aria-hidden />
         <nav className="flex items-center gap-1">
           <Button asChild variant="ghost" size="sm">
-            <Link to="/">Survey</Link>
+            <Link to="/">Hospital</Link>
           </Button>
           {user.role === "admin" && (
             <Button asChild variant="ghost" size="sm">
@@ -60,7 +61,8 @@ export default function App() {
     <>
       <Header />
       <Routes>
-        <Route path="/" element={<AgentPage />} />
+        <Route path="/" element={<HospitalPage />} />
+        <Route path="/doctors" element={<DoctorPage />} />
         <Route
           path="/admin"
           element={

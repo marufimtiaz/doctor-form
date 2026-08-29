@@ -1,11 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import {
   changePassword,
-  createSurvey,
   listMySurveys,
   myStats,
   TOKEN_KEY,
@@ -13,10 +13,8 @@ import {
   type Survey,
 } from "@/api";
 import LocationInput from "@/components/LocationInput";
-import NameplateInput from "@/components/NameplateInput";
 import ChangePasswordForm from "@/components/PasswordForm";
 import PhoneEditor from "@/components/PhoneEditor";
-import SlotEditor from "@/components/SlotEditor";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,33 +33,28 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useHospital } from "@/hospital";
 import { describePlace, describeSlot } from "@/lib/formatters";
 import {
-  emptySurveyValues,
-  surveySchema,
-  toBackendSlots,
-  type SurveyForm,
-  type SurveyOutput,
+  emptyHospitalValues,
+  hospitalSchema,
+  type HospitalForm,
 } from "@/schemas/survey";
 
-export default function AgentPage() {
+export default function HospitalPage() {
+  const navigate = useNavigate();
+  const { hospital, doctorsAdded, startHospital } = useHospital();
+
   const [stats, setStats] = useState<Stats | null>(null);
   const [mine, setMine] = useState<Survey[]>([]);
   const [loading, setLoading] = useState(true);
   // A failed load must not read as an empty list: an agent with 40 surveys
   // being told they have none is worse than an error message.
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [nameplate, setNameplate] = useState<File | null>(null);
-  const [nameplateError, setNameplateError] = useState<string | null>(null);
-  // Remounts LocationInput after each submit so the next chamber gets its
-  // own GPS fix. Without the increment the key never changes, the effect runs
-  // once per page load, and an agent filing six surveys a day gets
-  // coordinates for the first one only.
-  const [resetKey, setResetKey] = useState(0);
 
-  const form = useForm<SurveyForm, unknown, SurveyOutput>({
-    resolver: zodResolver(surveySchema),
-    defaultValues: emptySurveyValues(),
+  const form = useForm<HospitalForm>({
+    resolver: zodResolver(hospitalSchema),
+    defaultValues: emptyHospitalValues(),
   });
 
   const refresh = useCallback(async () => {
@@ -81,50 +74,15 @@ export default function AgentPage() {
     void refresh();
   }, [refresh]);
 
-  async function onSubmit(values: SurveyForm) {
-    if (!nameplate) {
-      setNameplateError("A nameplate photo is required.");
-      return;
-    }
-    setNameplateError(null);
-
-    const parsed = surveySchema.parse(values);
-    const body = new FormData();
-    body.set("hospital_name", parsed.hospital_name);
-    body.set("has_emergency_service", String(parsed.has_emergency_service));
-    body.set("daily_patients", String(parsed.daily_patients));
-    body.set("avg_duration_min", String(parsed.avg_duration_min));
-    body.set("consultation_fee_bdt", String(parsed.consultation_fee_bdt));
-    // Multipart cannot nest, so these travel as JSON strings. Phones are
-    // objects in the form because useFieldArray requires objects; the API
-    // wants bare strings.
-    body.set("slots", JSON.stringify(toBackendSlots(parsed.slots)));
-    body.set("phones", JSON.stringify(parsed.phones.map((p) => p.value)));
-    body.set("nameplate", nameplate);
-    if (parsed.city.trim()) body.set("city", parsed.city.trim());
-    if (parsed.district.trim()) body.set("district", parsed.district.trim());
-    if (parsed.latitude.trim()) body.set("latitude", parsed.latitude.trim());
-    if (parsed.longitude.trim()) body.set("longitude", parsed.longitude.trim());
-
-    try {
-      await createSurvey(body);
-      form.reset(emptySurveyValues());
-      setNameplate(null);
-      setResetKey((n) => n + 1);
-      setResetKey((k) => k + 1);
-      toast.success("Survey submitted.");
-      await refresh();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
-    }
+  function onSubmit(values: HospitalForm) {
+    startHospital(values);
+    navigate("/doctors");
   }
 
   return (
     <main className="mx-auto max-w-3xl space-y-8 px-4 py-8">
       <section>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          New chamber survey
-        </h1>
+        <h1 className="text-2xl font-semibold tracking-tight">New hospital</h1>
         <div className="mt-4 grid grid-cols-2 gap-3">
           {loading ? (
             <>
@@ -145,9 +103,7 @@ export default function AgentPage() {
               <Card className="py-4">
                 <CardContent className="text-center">
                   <div className="text-2xl font-semibold">{stats.today}</div>
-                  <div className="text-xs text-muted-foreground">
-                    filed today
-                  </div>
+                  <div className="text-xs text-muted-foreground">filed today</div>
                 </CardContent>
               </Card>
               <Card className="py-4">
@@ -160,6 +116,23 @@ export default function AgentPage() {
           )}
         </div>
       </section>
+
+      {hospital && (
+        <Alert>
+          <AlertDescription className="flex flex-wrap items-center gap-2">
+            <span>
+              {hospital.hospital_name} is still open
+              {doctorsAdded > 0
+                ? ` with ${doctorsAdded} doctor${doctorsAdded > 1 ? "s" : ""} filed`
+                : ""}
+              .
+            </span>
+            <Button size="sm" onClick={() => navigate("/doctors")}>
+              Continue with {hospital.hospital_name}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Card>
         <CardContent>
@@ -215,91 +188,14 @@ export default function AgentPage() {
               />
 
               <LocationInput
-                key={resetKey}
-                control={form.control}
-                setValue={form.setValue}
-                getValues={form.getValues}
-              />
-              <NameplateInput
-                file={nameplate}
-                onChange={(f) => {
-                  setNameplate(f);
-                  // Otherwise the destructive "required" text sits under a
-                  // perfectly valid image until the next submit attempt.
-                  if (f) setNameplateError(null);
-                }}
-                error={nameplateError}
-              />
-              <SlotEditor
                 control={form.control}
                 setValue={form.setValue}
                 getValues={form.getValues}
               />
               <PhoneEditor control={form.control} />
 
-              <div className="grid gap-4 sm:grid-cols-3">
-                <FormField
-                  control={form.control}
-                  name="daily_patients"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Patients per day</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={1}
-                          {...field}
-                          value={(field.value as string | number) ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="avg_duration_min"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Minutes per patient</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={1}
-                          {...field}
-                          value={(field.value as string | number) ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="consultation_fee_bdt"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fee (BDT)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          {...field}
-                          value={(field.value as string | number) ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full sm:w-auto"
-                disabled={form.formState.isSubmitting}
-              >
-                {form.formState.isSubmitting ? "Submitting…" : "Submit survey"}
+              <Button type="submit" className="w-full sm:w-auto">
+                Start adding doctors
               </Button>
             </form>
           </Form>
@@ -340,15 +236,11 @@ export default function AgentPage() {
                         {new Date(s.created_at).toLocaleString()}
                       </time>
                     </div>
-                    <div className="text-muted-foreground">
-                      {describePlace(s)}
-                    </div>
+                    <div className="text-muted-foreground">{describePlace(s)}</div>
                     <div className="text-muted-foreground">
                       {s.slots.map(describeSlot).join(" · ")}
                     </div>
-                    <div className="text-muted-foreground">
-                      {s.phones.join(" · ")}
-                    </div>
+                    <div className="text-muted-foreground">{s.phones.join(" · ")}</div>
                     <div className="text-muted-foreground">
                       {s.daily_patients}/day · {s.avg_duration_min} min · ৳
                       {s.consultation_fee_bdt}
