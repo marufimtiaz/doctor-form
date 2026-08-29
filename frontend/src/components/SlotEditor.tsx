@@ -1,5 +1,5 @@
 import { AlertTriangle, Clock, Plus, Trash2, Users, X } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   useFieldArray,
   useWatch,
@@ -43,7 +43,7 @@ const SHIFT_PRESETS = [
   { label: "Night (7 PM–10 PM)", start: "19:00", end: "22:00" },
 ];
 
-// Generate 30-minute interval options from 06:00 to 23:00
+// 30-minute interval options (06:00 to 23:00)
 const TIME_OPTIONS: { value: string; label: string }[] = [];
 for (let hour = 6; hour <= 23; hour++) {
   for (let min of [0, 30]) {
@@ -57,9 +57,12 @@ for (let hour = 6; hour <= 23; hour++) {
   }
 }
 
-// Get color scheme based on start time
+const TIMELINE_START_MINS = 8 * 60; // 8 AM
+const TIMELINE_END_MINS = 23 * 60; // 11 PM
+const TOTAL_TIMELINE_MINS = TIMELINE_END_MINS - TIMELINE_START_MINS;
+
 function getShiftColorScheme(startStr: string) {
-  if (!startStr) return { bg: "bg-primary/80", border: "border-primary", text: "text-primary" };
+  if (!startStr) return { bg: "bg-primary", border: "border-primary", text: "text-primary" };
   const [h] = startStr.split(":").map(Number);
   if (h < 12) return { bg: "bg-amber-500", border: "border-amber-500", text: "text-amber-600 bg-amber-50" };
   if (h < 17) return { bg: "bg-sky-500", border: "border-sky-500", text: "text-sky-600 bg-sky-50" };
@@ -84,13 +87,21 @@ function timeToPercent(timeStr: string): number {
   if (!timeStr) return 0;
   const [h, m] = timeStr.split(":").map(Number);
   const mins = h * 60 + m;
-  const startMins = 8 * 60; // 8 AM
-  const endMins = 23 * 60; // 11 PM
-  const clamped = Math.max(startMins, Math.min(endMins, mins));
-  return ((clamped - startMins) / (endMins - startMins)) * 100;
+  const clamped = Math.max(TIMELINE_START_MINS, Math.min(TIMELINE_END_MINS, mins));
+  return ((clamped - TIMELINE_START_MINS) / TOTAL_TIMELINE_MINS) * 100;
 }
 
-// Adjust time string by offset minutes (clamped between 06:00 and 23:00)
+function percentToTime(percent: number): string {
+  const clampedPct = Math.max(0, Math.min(100, percent));
+  const rawMins = TIMELINE_START_MINS + (clampedPct / 100) * TOTAL_TIMELINE_MINS;
+  // Snap to nearest 30 mins
+  const snappedMins = Math.round(rawMins / 30) * 30;
+  const clampedMins = Math.max(6 * 60, Math.min(23 * 60, snappedMins));
+  const h = String(Math.floor(clampedMins / 60)).padStart(2, "0");
+  const m = String(clampedMins % 60).padStart(2, "0");
+  return `${h}:${m}`;
+}
+
 function adjustTime(timeStr: string, deltaMins: number): string {
   if (!timeStr) return timeStr;
   const [h, m] = timeStr.split(":").map(Number);
@@ -100,7 +111,6 @@ function adjustTime(timeStr: string, deltaMins: number): string {
   return `${newH}:${newM}`;
 }
 
-// Check for overlapping ranges in a single slot group
 function findOverlaps(ranges: Array<{ start_time: string; end_time: string }>) {
   const overlaps: string[] = [];
   for (let i = 0; i < ranges.length; i++) {
@@ -118,6 +128,52 @@ function findOverlaps(ranges: Array<{ start_time: string; end_time: string }>) {
   return overlaps;
 }
 
+// Find farthest free 30-min slot from existing ranges
+function findFarthestFreeSlot(ranges: Array<{ start_time: string; end_time: string }>): { start: string; end: string } | null {
+  const totalSlots = 30; // (23 - 8) * 2
+  const isOccupied = new Array(totalSlots).fill(false);
+
+  ranges.forEach((r) => {
+    if (!r.start_time || !r.end_time) return;
+    const [sh, sm] = r.start_time.split(":").map(Number);
+    const [eh, em] = r.end_time.split(":").map(Number);
+    const sIdx = Math.max(0, Math.floor((sh * 60 + sm - TIMELINE_START_MINS) / 30));
+    const eIdx = Math.min(totalSlots, Math.ceil((eh * 60 + em - TIMELINE_START_MINS) / 30));
+    for (let i = sIdx; i < eIdx; i++) {
+      if (i >= 0 && i < totalSlots) isOccupied[i] = true;
+    }
+  });
+
+  const freeIndices = isOccupied.map((occ, idx) => (occ ? -1 : idx)).filter((idx) => idx !== -1);
+  if (freeIndices.length === 0) return null;
+
+  const occIndices = isOccupied.map((occ, idx) => (occ ? idx : -1)).filter((idx) => idx !== -1);
+
+  if (occIndices.length === 0) {
+    return { start: "17:00", end: "20:00" };
+  }
+
+  let maxDist = -1;
+  let bestSlotIndex = freeIndices[0];
+
+  freeIndices.forEach((fIdx) => {
+    const minDistToOcc = Math.min(...occIndices.map((oIdx) => Math.abs(fIdx - oIdx)));
+    if (minDistToOcc > maxDist) {
+      maxDist = minDistToOcc;
+      bestSlotIndex = fIdx;
+    }
+  });
+
+  const startMins = TIMELINE_START_MINS + bestSlotIndex * 30;
+  const endMins = Math.min(TIMELINE_END_MINS, startMins + 60); // 1 hr duration
+  const sh = String(Math.floor(startMins / 60)).padStart(2, "0");
+  const sm = String(startMins % 60).padStart(2, "0");
+  const eh = String(Math.floor(endMins / 60)).padStart(2, "0");
+  const em = String(endMins % 60).padStart(2, "0");
+
+  return { start: `${sh}:${sm}`, end: `${eh}:${em}` };
+}
+
 export default function SlotEditor({
   control,
   setValue,
@@ -132,6 +188,8 @@ export default function SlotEditor({
     groupIndex: number;
     rangeIndex: number;
   } | null>(null);
+
+  const timelineRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   // Compute live schedule statistics
   const activeDaysSet = new Set<DayName>();
@@ -173,6 +231,18 @@ export default function SlotEditor({
     });
   };
 
+  const addSmartHandle = (slotIndex: number) => {
+    const currentRanges = slotsValue?.[slotIndex]?.ranges || [];
+    if (currentRanges.length >= 2) return; // Max 2 handle pairs
+    const freeSlot = findFarthestFreeSlot(currentRanges);
+    if (!freeSlot) return;
+    setValue(
+      `slots.${slotIndex}.ranges`,
+      [...currentRanges, { start_time: freeSlot.start, end_time: freeSlot.end }],
+      { shouldValidate: true, shouldDirty: true },
+    );
+  };
+
   const addRange = (slotIndex: number, start = "17:00", end = "20:00") => {
     const currentRanges = slotsValue?.[slotIndex]?.ranges || [];
     setValue(
@@ -206,6 +276,50 @@ export default function SlotEditor({
     });
   };
 
+  const handlePointerDrag = (
+    e: React.PointerEvent,
+    slotIndex: number,
+    rangeIndex: number,
+    field: "start_time" | "end_time",
+  ) => {
+    const trackEl = timelineRefs.current[slotIndex];
+    if (!trackEl) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+
+    const updateFromPointer = (pe: React.PointerEvent | PointerEvent) => {
+      const rect = trackEl.getBoundingClientRect();
+      const clientX = pe.clientX;
+      const pct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+      const nextTime = percentToTime(pct);
+
+      const currentRange = slotsValue?.[slotIndex]?.ranges?.[rangeIndex];
+      if (!currentRange) return;
+
+      if (field === "start_time" && currentRange.end_time && nextTime >= currentRange.end_time) {
+        return; // Prevent start >= end
+      }
+      if (field === "end_time" && currentRange.start_time && nextTime <= currentRange.start_time) {
+        return; // Prevent end <= start
+      }
+
+      setValue(`slots.${slotIndex}.ranges.${rangeIndex}.${field}`, nextTime, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+    };
+
+    updateFromPointer(e);
+
+    const onPointerMove = (pe: PointerEvent) => updateFromPointer(pe);
+    const onPointerUp = () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+  };
+
   return (
     <fieldset className="space-y-6 rounded-lg border p-4 bg-card">
       {/* Header Summary Badges Bar */}
@@ -234,6 +348,7 @@ export default function SlotEditor({
         const currentDays = slotsValue?.[index]?.days || [];
         const currentRanges = slotsValue?.[index]?.ranges || [];
         const overlaps = findOverlaps(currentRanges);
+        const freeSlotAvailable = currentRanges.length < 2 && findFarthestFreeSlot(currentRanges) !== null;
 
         return (
           <div
@@ -313,19 +428,45 @@ export default function SlotEditor({
               )}
             />
 
-            {/* Visual Timeline Bar */}
+            {/* Timeline Track with + Add Handle Button */}
             <div className="space-y-1.5 rounded-md bg-muted/40 p-3">
-              <div className="flex justify-between text-[10px] font-medium text-muted-foreground">
-                <span>8 AM</span>
-                <span>10 AM</span>
-                <span>12 PM</span>
-                <span>2 PM</span>
-                <span>4 PM</span>
-                <span>6 PM</span>
-                <span>8 PM</span>
-                <span>10 PM</span>
+              <div className="flex items-center justify-between">
+                <div className="flex justify-between text-[10px] font-medium text-muted-foreground flex-1 pr-4">
+                  <span>8 AM</span>
+                  <span>10 AM</span>
+                  <span>12 PM</span>
+                  <span>2 PM</span>
+                  <span>4 PM</span>
+                  <span>6 PM</span>
+                  <span>8 PM</span>
+                  <span>10 PM</span>
+                </div>
+                {/* Smart + Add Handle Button (max 2 handle pairs) */}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={!freeSlotAvailable}
+                  className="h-6 px-2 text-[11px] font-semibold"
+                  title={
+                    currentRanges.length >= 2
+                      ? "Max 2 handle pairs allowed per group"
+                      : !freeSlotAvailable
+                      ? "No free 30-min slot available"
+                      : "Add handle pair in farthest free slot"
+                  }
+                  onClick={() => addSmartHandle(index)}
+                >
+                  <Plus className="mr-1 size-3" /> Handle Pair
+                </Button>
               </div>
-              <div className="relative h-4 w-full rounded-full bg-muted border overflow-hidden">
+
+              <div
+                ref={(el) => {
+                  timelineRefs.current[index] = el;
+                }}
+                className="relative h-6 w-full rounded-full bg-muted border select-none my-1"
+              >
                 {/* 30-min tick marks */}
                 {Array.from({ length: 31 }).map((_, i) => (
                   <div
@@ -338,7 +479,8 @@ export default function SlotEditor({
                     style={{ left: `${(i / 30) * 100}%` }}
                   />
                 ))}
-                {/* Visual Color-Coded Segments for Active Ranges */}
+
+                {/* Color-Coded Segments & Draggable Handle Knobs */}
                 {currentRanges.map((range, rIdx) => {
                   const left = timeToPercent(range.start_time);
                   const right = timeToPercent(range.end_time);
@@ -351,12 +493,33 @@ export default function SlotEditor({
                   return (
                     <div
                       key={rIdx}
-                      className={`absolute top-0 bottom-0 ${colors.bg} transition-all rounded-sm ${
-                        isHovered ? "ring-2 ring-foreground z-10 scale-y-110" : "opacity-90"
+                      className={`absolute top-0 bottom-0 ${colors.bg} transition-all rounded-sm flex items-center justify-between ${
+                        isHovered ? "ring-2 ring-foreground z-10" : "opacity-90"
                       }`}
                       style={{ left: `${left}%`, width: `${width}%` }}
-                      title={`Shift ${rIdx + 1}: ${range.start_time} - ${range.end_time}`}
-                    />
+                    >
+                      {/* Left Drag Handle (Start Time Knob) */}
+                      <div
+                        onPointerDown={(e) =>
+                          handlePointerDrag(e, index, rIdx, "start_time")
+                        }
+                        className="absolute -left-2.5 top-1/2 -translate-y-1/2 w-4 h-6 bg-background border-2 border-primary rounded-full shadow-md cursor-ew-resize hover:scale-110 active:scale-125 z-20 flex items-center justify-center"
+                        title={`Drag Start Time (${range.start_time})`}
+                      >
+                        <div className="w-0.5 h-2 bg-muted-foreground rounded-full" />
+                      </div>
+
+                      {/* Right Drag Handle (End Time Knob) */}
+                      <div
+                        onPointerDown={(e) =>
+                          handlePointerDrag(e, index, rIdx, "end_time")
+                        }
+                        className="absolute -right-2.5 top-1/2 -translate-y-1/2 w-4 h-6 bg-background border-2 border-primary rounded-full shadow-md cursor-ew-resize hover:scale-110 active:scale-125 z-20 flex items-center justify-center"
+                        title={`Drag End Time (${range.end_time})`}
+                      >
+                        <div className="w-0.5 h-2 bg-muted-foreground rounded-full" />
+                      </div>
+                    </div>
                   );
                 })}
               </div>
