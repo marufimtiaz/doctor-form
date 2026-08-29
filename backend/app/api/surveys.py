@@ -1,5 +1,6 @@
 import io
 import json
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -141,6 +142,9 @@ async def create_survey(
     district: Annotated[str | None, Form()] = None,
     latitude: Annotated[float | None, Form()] = None,
     longitude: Annotated[float | None, Form()] = None,
+    doctor_name: Annotated[str | None, Form()] = None,
+    doctor_degrees: Annotated[str | None, Form()] = None,
+    doctor_specializations: Annotated[str | None, Form()] = None,
 ) -> SurveyRead:
     """Multipart so the nameplate and the form arrive in one request.
 
@@ -162,6 +166,9 @@ async def create_survey(
             consultation_fee_bdt=consultation_fee_bdt,
             slots=_parse_json_field(slots, "slots"),
             phones=_parse_json_field(phones, "phones"),
+            doctor_name=doctor_name,
+            doctor_degrees=doctor_degrees,
+            doctor_specializations=doctor_specializations,
         )
     except ValidationError as exc:
         # include_context=False drops the raw ValueError objects pydantic puts
@@ -195,6 +202,18 @@ async def create_survey(
         avg_duration_min=payload.avg_duration_min,
         consultation_fee_bdt=payload.consultation_fee_bdt,
     )
+    # Any one field present means a preview ran and the agent approved what they
+    # saw, so there is nothing left for the worker to do. All three blank is
+    # treated as no preview: a nameplate the model could not read is worth
+    # retrying, not recording as a finished empty read.
+    if payload.doctor_name or payload.doctor_degrees or payload.doctor_specializations:
+        row.doctor_name = payload.doctor_name
+        row.doctor_degrees = payload.doctor_degrees
+        row.doctor_specializations = payload.doctor_specializations
+        row.ocr_status = "done"
+        row.ocr_source = "upload"
+        row.ocr_completed_at = datetime.now(UTC)
+
     session.add(row)
     await session.commit()
     await session.refresh(row)

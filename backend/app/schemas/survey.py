@@ -45,6 +45,12 @@ class SurveyCreate(BaseModel):
     slots: list[SlotIn] = Field(min_length=1)
     phones: list[str] = Field(min_length=1)
 
+    # Read from the nameplate on upload and approved by the agent. Absent when
+    # no preview ran, which leaves the row to the worker.
+    doctor_name: str | None = Field(default=None, max_length=200)
+    doctor_degrees: str | None = Field(default=None, max_length=1000)
+    doctor_specializations: str | None = Field(default=None, max_length=1000)
+
     @field_validator("city", "district")
     @classmethod
     def _blank_is_absent(cls, value: str | None) -> str | None:
@@ -58,6 +64,13 @@ class SurveyCreate(BaseModel):
     @classmethod
     def _normalize_phones(cls, values: list[str]) -> list[str]:
         return [normalize_phone(v) for v in values]
+
+    @field_validator("doctor_name", "doctor_degrees", "doctor_specializations")
+    @classmethod
+    def _blank_doctor_field_is_absent(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
 
     @model_validator(mode="after")
     def _has_a_location(self) -> SurveyCreate:
@@ -96,6 +109,7 @@ class SurveyRead(BaseModel):
     # Why the last attempt failed, so the dashboard can explain rather than
     # just report a failure.
     ocr_error: str | None = None
+    ocr_source: str | None = None
     doctor_name: str | None
     doctor_degrees: str | None
     doctor_specializations: str | None

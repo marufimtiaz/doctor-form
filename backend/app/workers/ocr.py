@@ -108,6 +108,7 @@ async def process_survey(
             row.doctor_degrees = fields.doctor_degrees
             row.doctor_specializations = fields.doctor_specializations
             row.ocr_status = "done"
+            row.ocr_source = "worker"
             row.ocr_error = None
             row.ocr_next_attempt_at = None
             row.ocr_completed_at = datetime.now(UTC)
