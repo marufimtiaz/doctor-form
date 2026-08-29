@@ -60,9 +60,9 @@ describe("parseStoredSession", () => {
     expect(parseStoredSession(bad)).toBeNull();
   });
 
-  it("returns null when the hospital has no phones", () => {
-    const bad = { ...session, hospital: { ...session.hospital, phones: [] } };
-    expect(parseStoredSession(JSON.stringify(bad))).toBeNull();
+  it("keeps a hospital that carries no common number", () => {
+    const ok = { ...session, hospital: { ...session.hospital, phones: [] } };
+    expect(parseStoredSession(JSON.stringify(ok))).not.toBeNull();
   });
 
   it("returns null when the hospital has neither coordinates nor a place", () => {

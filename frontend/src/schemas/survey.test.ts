@@ -162,6 +162,7 @@ describe("schema split", () => {
     phones: [{ value: "01712345678" }],
   };
   const doctor = {
+    phones: [{ value: "01712345678" }],
     daily_patients: "30",
     avg_duration_min: "10",
     consultation_fee_bdt: "800",
@@ -190,8 +191,17 @@ describe("schema split", () => {
     expect(hospitalSchema.safeParse(bad).success).toBe(false);
   });
 
-  it("requires at least one phone on the hospital half", () => {
-    expect(hospitalSchema.safeParse({ ...hospital, phones: [] }).success).toBe(false);
+  it("allows the hospital half to carry no common number", () => {
+    expect(hospitalSchema.safeParse({ ...hospital, phones: [] }).success).toBe(true);
+  });
+
+  it("drops blank rows from the hospital's common numbers", () => {
+    const parsed = hospitalSchema.parse({ ...hospital, phones: [{ value: "  " }] });
+    expect(parsed.phones).toEqual([]);
+  });
+
+  it("requires at least one phone on the doctor half", () => {
+    expect(doctorSchema.safeParse({ ...doctor, phones: [] }).success).toBe(false);
   });
 
   it("requires at least one slot group on the doctor half", () => {

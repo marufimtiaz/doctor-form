@@ -110,13 +110,25 @@ const hospitalShape = {
       "Longitude must be between -180 and 180.",
     ),
 
+  // Optional: only for a hospital where every doctor is booked through one
+  // common line. Blank rows are dropped rather than rejected, so an agent who
+  // opens the field and changes their mind is not blocked by it.
   // useFieldArray needs objects, not bare strings.
   phones: z
-    .array(z.object({ value: z.string().trim().min(1, "Enter a number.") }))
-    .min(1, "Add at least one phone number."),
+    .array(z.object({ value: z.string().trim() }))
+    .default([])
+    .transform((list) => list.filter((p) => p.value !== "")),
 };
 
 const doctorShape = {
+  // Required here rather than on the hospital: a doctor has to be reachable,
+  // whether by the hospital's common line (pre-filled from it) or their own.
+  // surveySchema spreads doctorShape last, so this is the rule that governs
+  // what actually reaches the API - which requires at least one number.
+  phones: z
+    .array(z.object({ value: z.string().trim().min(1, "Enter a number.") }))
+    .min(1, "Add at least one phone number."),
+
   daily_patients: numeric("Enter a number.", (n) =>
     n.int().positive("Must be more than zero."),
   ),
@@ -167,10 +179,11 @@ export const emptyHospitalValues = (): HospitalForm => ({
   district: "",
   latitude: "",
   longitude: "",
-  phones: [{ value: "" }],
+  phones: [],
 });
 
 export const emptyDoctorValues = (): DoctorForm => ({
+  phones: [{ value: "" }],
   daily_patients: "",
   avg_duration_min: "",
   consultation_fee_bdt: "",
