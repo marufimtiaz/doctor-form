@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { EVENING_CHAMBER } from "@/lib/shifts";
+
 /** Text inputs give strings; the API wants numbers. Coercing here keeps the
  *  form fields plain and the parsed output correctly typed. */
 const blankToUndefined = (value: unknown) =>
@@ -138,7 +140,7 @@ export function toBackendSlots(
 
 export const emptySlot = () => ({
   days: ["Sat"] as DayName[],
-  ranges: [{ start_time: "17:00", end_time: "20:00" }],
+  ranges: [{ ...EVENING_CHAMBER }],
 });
 
 export const emptySurveyValues = (): SurveyForm => ({

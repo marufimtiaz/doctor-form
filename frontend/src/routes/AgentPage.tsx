@@ -59,7 +59,7 @@ export default function AgentPage() {
   // coordinates for the first one only.
   const [resetKey, setResetKey] = useState(0);
 
-  const form = useForm<SurveyForm, any, SurveyOutput>({
+  const form = useForm<SurveyForm, unknown, SurveyOutput>({
     resolver: zodResolver(surveySchema),
     defaultValues: emptySurveyValues(),
   });
@@ -230,7 +230,11 @@ export default function AgentPage() {
                 }}
                 error={nameplateError}
               />
-              <SlotEditor control={form.control} setValue={form.setValue} />
+              <SlotEditor
+                control={form.control}
+                setValue={form.setValue}
+                getValues={form.getValues}
+              />
               <PhoneEditor control={form.control} />
 
               <div className="grid gap-4 sm:grid-cols-3">

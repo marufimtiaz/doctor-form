@@ -4,6 +4,7 @@ import {
   useFieldArray,
   useWatch,
   type Control,
+  type UseFormGetValues,
   type UseFormSetValue,
 } from "react-hook-form";
 
@@ -24,6 +25,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  TIMELINE_START_TIME,
+  findOverlaps,
+  getFilteredTimeOptions,
+  percentToTime,
+  sortRanges,
+  suggestSecondShift,
+  timeToPercent,
+  type TimeRange,
+} from "@/lib/shifts";
+import {
   DAY_NAMES,
   emptySlot,
   type DayName,
@@ -35,30 +46,6 @@ const PRESETS: { label: string; days: DayName[] }[] = [
   { label: "Weekdays", days: ["Mon", "Tue", "Wed", "Thu"] },
   { label: "All Days", days: ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"] },
 ];
-
-// 30-minute interval options (06:00 to 24:00)
-const TIME_OPTIONS: { value: string; label: string }[] = [];
-for (let hour = 6; hour <= 24; hour++) {
-  for (let min of [0, 30]) {
-    if (hour === 24 && min === 30) continue;
-    const hh = String(hour).padStart(2, "0");
-    const mm = String(min).padStart(2, "0");
-    const value = `${hh}:${mm}`;
-    let label = "";
-    if (hour === 24 || (hour === 0 && min === 0)) {
-      label = "12:00 AM (Midnight)";
-    } else {
-      const period = hour >= 12 && hour < 24 ? "PM" : "AM";
-      const displayHour = hour % 12 === 0 ? 12 : hour % 12;
-      label = `${String(displayHour).padStart(2, "0")}:${mm} ${period}`;
-    }
-    TIME_OPTIONS.push({ value, label });
-  }
-}
-
-const TIMELINE_START_MINS = 8 * 60; // 8 AM
-const TIMELINE_END_MINS = 24 * 60; // 12 AM Midnight
-const TOTAL_TIMELINE_MINS = TIMELINE_END_MINS - TIMELINE_START_MINS;
 
 function getShiftColorScheme(startStr: string) {
   if (!startStr) return { bg: "bg-primary", border: "border-primary", text: "text-primary bg-primary/10" };
@@ -82,136 +69,14 @@ function formatDuration(startStr: string, endStr: string): string {
   return `${mins} min`;
 }
 
-function timeToPercent(timeStr: string): number {
-  if (!timeStr) return 0;
-  const [h, m] = timeStr.split(":").map(Number);
-  const mins = h * 60 + m;
-  const clamped = Math.max(TIMELINE_START_MINS, Math.min(TIMELINE_END_MINS, mins));
-  return ((clamped - TIMELINE_START_MINS) / TOTAL_TIMELINE_MINS) * 100;
-}
-
-function percentToTime(percent: number): string {
-  const clampedPct = Math.max(0, Math.min(100, percent));
-  const rawMins = TIMELINE_START_MINS + (clampedPct / 100) * TOTAL_TIMELINE_MINS;
-  const snappedMins = Math.round(rawMins / 30) * 30;
-  const clampedMins = Math.max(6 * 60, Math.min(24 * 60, snappedMins));
-  const h = String(Math.floor(clampedMins / 60)).padStart(2, "0");
-  const m = String(clampedMins % 60).padStart(2, "0");
-  return `${h}:${m}`;
-}
-
-function sortRanges(ranges: Array<{ start_time: string; end_time: string }>) {
-  return [...ranges].sort((a, b) => a.start_time.localeCompare(b.start_time));
-}
-
-function findOverlaps(ranges: Array<{ start_time: string; end_time: string }>) {
-  const overlaps: string[] = [];
-  for (let i = 0; i < ranges.length; i++) {
-    for (let j = i + 1; j < ranges.length; j++) {
-      const r1 = ranges[i];
-      const r2 = ranges[j];
-      if (!r1.start_time || !r1.end_time || !r2.start_time || !r2.end_time) continue;
-      const startMax = r1.start_time > r2.start_time ? r1.start_time : r2.start_time;
-      const endMin = r1.end_time < r2.end_time ? r1.end_time : r2.end_time;
-      if (startMax < endMin) {
-        overlaps.push(`Shift ${i + 1} and Shift ${j + 1} overlap (${startMax} – ${endMin})`);
-      }
-    }
-  }
-  return overlaps;
-}
-
-// Strictly filter dropdown options based on adjacent shift boundaries
-function getFilteredTimeOptions(
-  field: "start_time" | "end_time",
-  rangeIndex: number,
-  ranges: Array<{ start_time: string; end_time: string }>,
-) {
-  const range = ranges[rangeIndex];
-  if (!range) return TIME_OPTIONS;
-
-  if (rangeIndex === 0) {
-    // Shift 1
-    const nextShift = ranges[1];
-    const maxBound = nextShift?.start_time || "24:00";
-
-    if (field === "start_time") {
-      // Must be < end_time and < maxBound
-      const upper = range.end_time && range.end_time < maxBound ? range.end_time : maxBound;
-      return TIME_OPTIONS.filter((t) => t.value < upper);
-    } else {
-      // end_time: Must be > start_time and <= maxBound
-      const lower = range.start_time || "06:00";
-      return TIME_OPTIONS.filter((t) => t.value > lower && t.value <= maxBound);
-    }
-  } else {
-    // Shift 2
-    const prevShift = ranges[0];
-    const minBound = prevShift?.end_time || "06:00";
-
-    if (field === "start_time") {
-      // Must be >= minBound and < end_time
-      const upper = range.end_time || "24:00";
-      return TIME_OPTIONS.filter((t) => t.value >= minBound && t.value < upper);
-    } else {
-      // end_time: Must be > start_time
-      const lower = range.start_time || minBound;
-      return TIME_OPTIONS.filter((t) => t.value > lower);
-    }
-  }
-}
-
-function findFarthestFreeSlot(ranges: Array<{ start_time: string; end_time: string }>): { start: string; end: string } | null {
-  const totalSlots = 32;
-  const isOccupied = new Array(totalSlots).fill(false);
-
-  ranges.forEach((r) => {
-    if (!r.start_time || !r.end_time) return;
-    const [sh, sm] = r.start_time.split(":").map(Number);
-    const [eh, em] = r.end_time.split(":").map(Number);
-    const sIdx = Math.max(0, Math.floor((sh * 60 + sm - TIMELINE_START_MINS) / 30));
-    const eIdx = Math.min(totalSlots, Math.ceil((eh * 60 + em - TIMELINE_START_MINS) / 30));
-    for (let i = sIdx; i < eIdx; i++) {
-      if (i >= 0 && i < totalSlots) isOccupied[i] = true;
-    }
-  });
-
-  const freeIndices = isOccupied.map((occ, idx) => (occ ? -1 : idx)).filter((idx) => idx !== -1);
-  if (freeIndices.length === 0) return null;
-
-  const occIndices = isOccupied.map((occ, idx) => (occ ? idx : -1)).filter((idx) => idx !== -1);
-
-  if (occIndices.length === 0) {
-    return { start: "17:00", end: "20:00" };
-  }
-
-  let maxDist = -1;
-  let bestSlotIndex = freeIndices[0];
-
-  freeIndices.forEach((fIdx) => {
-    const minDistToOcc = Math.min(...occIndices.map((oIdx) => Math.abs(fIdx - oIdx)));
-    if (minDistToOcc > maxDist) {
-      maxDist = minDistToOcc;
-      bestSlotIndex = fIdx;
-    }
-  });
-
-  const startMins = TIMELINE_START_MINS + bestSlotIndex * 30;
-  const endMins = Math.min(TIMELINE_END_MINS, startMins + 60);
-  const sh = String(Math.floor(startMins / 60)).padStart(2, "0");
-  const sm = String(startMins % 60).padStart(2, "0");
-  const eh = String(Math.floor(endMins / 60)).padStart(2, "0");
-  const em = String(endMins % 60).padStart(2, "0");
-
-  return { start: `${sh}:${sm}`, end: `${eh}:${em}` };
-}
-
 export default function SlotEditor({
   control,
   setValue,
+  getValues,
 }: {
   control: Control<SurveyForm>;
   setValue: UseFormSetValue<SurveyForm>;
+  getValues: UseFormGetValues<SurveyForm>;
 }) {
   const { fields, append, remove } = useFieldArray({ control, name: "slots" });
   const slotsValue = useWatch({ control, name: "slots" });
@@ -229,7 +94,7 @@ export default function SlotEditor({
     });
   };
 
-  const updateSortedRanges = (slotIndex: number, ranges: Array<{ start_time: string; end_time: string }>) => {
+  const updateSortedRanges = (slotIndex: number, ranges: TimeRange[]) => {
     const sorted = sortRanges(ranges);
     setValue(`slots.${slotIndex}.ranges`, sorted, {
       shouldValidate: false,
@@ -237,16 +102,24 @@ export default function SlotEditor({
     });
   };
 
+  // Mutations read through getValues rather than the watched copy: useWatch is
+  // notified from an effect, so right after a group is appended (or midway
+  // through a drag, where the window listeners close over an older render)
+  // slotsValue can still be a commit behind. getValues is always the live form
+  // state, which is what these handlers need to compute the next value from.
+  const rangesOf = (slotIndex: number) =>
+    getValues(`slots.${slotIndex}.ranges`) || [];
+
   const addSmartHandle = (slotIndex: number) => {
-    const currentRanges = slotsValue?.[slotIndex]?.ranges || [];
+    const currentRanges = rangesOf(slotIndex);
     if (currentRanges.length >= 2) return;
-    const freeSlot = findFarthestFreeSlot(currentRanges);
-    if (!freeSlot) return;
-    updateSortedRanges(slotIndex, [...currentRanges, { start_time: freeSlot.start, end_time: freeSlot.end }]);
+    const suggestion = suggestSecondShift(currentRanges);
+    if (!suggestion) return;
+    updateSortedRanges(slotIndex, [...currentRanges, suggestion]);
   };
 
   const removeRange = (slotIndex: number, rangeIndex: number) => {
-    const currentRanges = slotsValue?.[slotIndex]?.ranges || [];
+    const currentRanges = rangesOf(slotIndex);
     if (currentRanges.length <= 1) return;
     const remaining = currentRanges.filter((_, i) => i !== rangeIndex);
     updateSortedRanges(slotIndex, remaining);
@@ -268,7 +141,7 @@ export default function SlotEditor({
       const pct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
       const nextTime = percentToTime(pct);
 
-      const currentRanges = [...(slotsValue?.[slotIndex]?.ranges || [])];
+      const currentRanges = [...rangesOf(slotIndex)];
       const currentRange = currentRanges[rangeIndex];
       if (!currentRange) return;
 
@@ -277,7 +150,7 @@ export default function SlotEditor({
         if (field === "start_time" && nextTime >= (currentRange.end_time < maxBound ? currentRange.end_time : maxBound)) return;
         if (field === "end_time" && (nextTime <= currentRange.start_time || nextTime > maxBound)) return;
       } else {
-        const minBound = currentRanges[0]?.end_time || "06:00";
+        const minBound = currentRanges[0]?.end_time || TIMELINE_START_TIME;
         if (field === "start_time" && (nextTime < minBound || nextTime >= currentRange.end_time)) return;
         if (field === "end_time" && nextTime <= currentRange.start_time) return;
       }
@@ -305,9 +178,16 @@ export default function SlotEditor({
       </div>
 
       {fields.map((field, index) => {
-        const currentRanges = slotsValue?.[index]?.ranges || [];
+        // A freshly appended group has no watched value on its first render -
+        // useFieldArray sets `fields` synchronously, but react-hook-form emits
+        // the watch notification from an effect, one commit later. `field`
+        // already carries the appended values, so falling back to it draws the
+        // handles and the shift panel in the same commit as the bar rather
+        // than letting them pop in afterwards.
+        const currentRanges = slotsValue?.[index]?.ranges ?? field.ranges ?? [];
         const overlaps = findOverlaps(currentRanges);
-        const freeSlotAvailable = currentRanges.length < 2 && findFarthestFreeSlot(currentRanges) !== null;
+        const freeSlotAvailable =
+          currentRanges.length < 2 && suggestSecondShift(currentRanges) !== null;
 
         return (
           <div
@@ -463,7 +343,7 @@ export default function SlotEditor({
                   return (
                     <div
                       key={rIdx}
-                      className={`absolute top-0 bottom-0 ${colors.bg} transition-all rounded-sm flex items-center justify-between ${
+                      className={`absolute top-0 bottom-0 ${colors.bg} transition-[opacity,box-shadow] rounded-sm flex items-center justify-between ${
                         isHovered ? "ring-2 ring-foreground z-10" : "opacity-90"
                       }`}
                       style={{ left: `${left}%`, width: `${width}%` }}
