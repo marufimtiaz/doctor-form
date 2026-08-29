@@ -112,19 +112,22 @@ export const surveySchema = z
         message: "Provide coordinates or city and district.",
       });
     }
-  })
-  .transform((data) => ({
-    ...data,
-    slots: data.slots.flatMap((s) =>
-      s.days.map((day) => ({
-        day_of_week: DAY_NAME_TO_INT[day],
-        start_time: s.start_time,
-        end_time: s.end_time,
-      })),
-    ),
-  }));
+  });
 
 export type SurveyForm = z.input<typeof surveySchema>;
+export type SurveyOutput = z.output<typeof surveySchema>;
+
+export function toBackendSlots(
+  slots: z.infer<typeof slotSchema>[],
+): { day_of_week: number; start_time: string; end_time: string }[] {
+  return slots.flatMap((s) =>
+    s.days.map((day) => ({
+      day_of_week: DAY_NAME_TO_INT[day],
+      start_time: s.start_time,
+      end_time: s.end_time,
+    })),
+  );
+}
 
 export const emptySlot = () => ({
   days: ["Sat"] as DayName[],

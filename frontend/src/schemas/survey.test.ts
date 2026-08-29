@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { emptySlot, surveySchema } from "./survey";
+import { emptySlot, surveySchema, toBackendSlots } from "./survey";
 
 /** A valid form, minus location - each test supplies its own. */
 const base = {
@@ -87,7 +87,7 @@ describe("slots", () => {
     const result = parse({ ...withCity, slots });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.slots).toEqual([
+      expect(toBackendSlots(result.data.slots)).toEqual([
         { day_of_week: 5, start_time: "17:00", end_time: "20:00" },
         { day_of_week: 6, start_time: "17:00", end_time: "20:00" },
       ]);

@@ -39,7 +39,9 @@ import { describePlace, describeSlot } from "@/lib/formatters";
 import {
   emptySurveyValues,
   surveySchema,
+  toBackendSlots,
   type SurveyForm,
+  type SurveyOutput,
 } from "@/schemas/survey";
 
 export default function AgentPage() {
@@ -57,7 +59,7 @@ export default function AgentPage() {
   // coordinates for the first one only.
   const [resetKey, setResetKey] = useState(0);
 
-  const form = useForm<SurveyForm>({
+  const form = useForm<SurveyForm, any, SurveyOutput>({
     resolver: zodResolver(surveySchema),
     defaultValues: emptySurveyValues(),
   });
@@ -95,7 +97,7 @@ export default function AgentPage() {
     // Multipart cannot nest, so these travel as JSON strings. Phones are
     // objects in the form because useFieldArray requires objects; the API
     // wants bare strings.
-    body.set("slots", JSON.stringify(parsed.slots));
+    body.set("slots", JSON.stringify(toBackendSlots(parsed.slots)));
     body.set("phones", JSON.stringify(parsed.phones.map((p) => p.value)));
     body.set("nameplate", nameplate);
     if (parsed.city.trim()) body.set("city", parsed.city.trim());
@@ -192,7 +194,7 @@ export default function AgentPage() {
                 }}
                 error={nameplateError}
               />
-              <SlotEditor control={form.control} />
+              <SlotEditor control={form.control} setValue={form.setValue} />
               <PhoneEditor control={form.control} />
 
               <div className="grid gap-4 sm:grid-cols-3">
