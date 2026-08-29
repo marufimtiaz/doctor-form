@@ -94,7 +94,6 @@ function timeToPercent(timeStr: string): number {
 function percentToTime(percent: number): string {
   const clampedPct = Math.max(0, Math.min(100, percent));
   const rawMins = TIMELINE_START_MINS + (clampedPct / 100) * TOTAL_TIMELINE_MINS;
-  // Snap to nearest 30 mins
   const snappedMins = Math.round(rawMins / 30) * 30;
   const clampedMins = Math.max(6 * 60, Math.min(23 * 60, snappedMins));
   const h = String(Math.floor(clampedMins / 60)).padStart(2, "0");
@@ -128,9 +127,8 @@ function findOverlaps(ranges: Array<{ start_time: string; end_time: string }>) {
   return overlaps;
 }
 
-// Find farthest free 30-min slot from existing ranges
 function findFarthestFreeSlot(ranges: Array<{ start_time: string; end_time: string }>): { start: string; end: string } | null {
-  const totalSlots = 30; // (23 - 8) * 2
+  const totalSlots = 30;
   const isOccupied = new Array(totalSlots).fill(false);
 
   ranges.forEach((r) => {
@@ -165,7 +163,7 @@ function findFarthestFreeSlot(ranges: Array<{ start_time: string; end_time: stri
   });
 
   const startMins = TIMELINE_START_MINS + bestSlotIndex * 30;
-  const endMins = Math.min(TIMELINE_END_MINS, startMins + 60); // 1 hr duration
+  const endMins = Math.min(TIMELINE_END_MINS, startMins + 60);
   const sh = String(Math.floor(startMins / 60)).padStart(2, "0");
   const sm = String(startMins % 60).padStart(2, "0");
   const eh = String(Math.floor(endMins / 60)).padStart(2, "0");
@@ -191,7 +189,6 @@ export default function SlotEditor({
 
   const timelineRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
-  // Compute live schedule statistics
   const activeDaysSet = new Set<DayName>();
   let totalWeeklyMins = 0;
 
@@ -233,7 +230,7 @@ export default function SlotEditor({
 
   const addSmartHandle = (slotIndex: number) => {
     const currentRanges = slotsValue?.[slotIndex]?.ranges || [];
-    if (currentRanges.length >= 2) return; // Max 2 handle pairs
+    if (currentRanges.length >= 2) return;
     const freeSlot = findFarthestFreeSlot(currentRanges);
     if (!freeSlot) return;
     setValue(
@@ -296,10 +293,10 @@ export default function SlotEditor({
       if (!currentRange) return;
 
       if (field === "start_time" && currentRange.end_time && nextTime >= currentRange.end_time) {
-        return; // Prevent start >= end
+        return;
       }
       if (field === "end_time" && currentRange.start_time && nextTime <= currentRange.start_time) {
-        return; // Prevent end <= start
+        return;
       }
 
       setValue(`slots.${slotIndex}.ranges.${rangeIndex}.${field}`, nextTime, {
@@ -321,13 +318,13 @@ export default function SlotEditor({
   };
 
   return (
-    <fieldset className="space-y-6 rounded-lg border p-4 bg-card">
+    <fieldset className="space-y-6 rounded-lg border p-3 sm:p-4 bg-card">
       {/* Header Summary Badges Bar */}
       <div className="space-y-2 border-b pb-3">
         <div className="flex items-center justify-between">
-          <Label className="text-base font-bold">Availability Schedule</Label>
+          <Label className="text-sm sm:text-base font-bold">Availability Schedule</Label>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs">
           <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 font-semibold text-primary">
             <Clock className="size-3.5" />
             {totalWeeklyHours} hrs/week
@@ -353,7 +350,7 @@ export default function SlotEditor({
         return (
           <div
             key={field.id}
-            className="space-y-4 rounded-lg border bg-background p-4 shadow-sm transition-all"
+            className="space-y-4 rounded-lg border bg-background p-3 sm:p-4 shadow-sm transition-all"
           >
             {/* Slot Header */}
             <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
@@ -428,10 +425,11 @@ export default function SlotEditor({
               )}
             />
 
-            {/* Timeline Track with + Add Handle Button */}
-            <div className="space-y-1.5 rounded-md bg-muted/40 p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex justify-between text-[10px] font-medium text-muted-foreground flex-1 pr-4">
+            {/* Mobile Responsive Timeline Track & Handle Pair Button */}
+            <div className="space-y-2 rounded-md bg-muted/40 p-2.5 sm:p-3">
+              <div className="flex items-center justify-between gap-2">
+                {/* Desktop Labels (8 labels) */}
+                <div className="hidden sm:flex justify-between text-[10px] font-medium text-muted-foreground flex-1 pr-4">
                   <span>8 AM</span>
                   <span>10 AM</span>
                   <span>12 PM</span>
@@ -441,13 +439,20 @@ export default function SlotEditor({
                   <span>8 PM</span>
                   <span>10 PM</span>
                 </div>
-                {/* Smart + Add Handle Button (max 2 handle pairs) */}
+                {/* Mobile Milestone Labels (4 labels) */}
+                <div className="flex sm:hidden justify-between text-[10px] font-medium text-muted-foreground flex-1 pr-2">
+                  <span>8 AM</span>
+                  <span>1 PM</span>
+                  <span>6 PM</span>
+                  <span>11 PM</span>
+                </div>
+                {/* Handle Pair Button */}
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
                   disabled={!freeSlotAvailable}
-                  className="h-6 px-2 text-[11px] font-semibold"
+                  className="h-6 px-2 text-[11px] font-semibold shrink-0"
                   title={
                     currentRanges.length >= 2
                       ? "Max 2 handle pairs allowed per group"
@@ -465,7 +470,7 @@ export default function SlotEditor({
                 ref={(el) => {
                   timelineRefs.current[index] = el;
                 }}
-                className="relative h-6 w-full rounded-full bg-muted border select-none my-1"
+                className="relative h-6 w-full rounded-full bg-muted border select-none my-1 touch-none"
               >
                 {/* 30-min tick marks */}
                 {Array.from({ length: 31 }).map((_, i) => (
@@ -480,7 +485,7 @@ export default function SlotEditor({
                   />
                 ))}
 
-                {/* Color-Coded Segments & Draggable Handle Knobs */}
+                {/* Color-Coded Segments & Touch-Friendly Draggable Knobs */}
                 {currentRanges.map((range, rIdx) => {
                   const left = timeToPercent(range.start_time);
                   const right = timeToPercent(range.end_time);
@@ -498,26 +503,26 @@ export default function SlotEditor({
                       }`}
                       style={{ left: `${left}%`, width: `${width}%` }}
                     >
-                      {/* Left Drag Handle (Start Time Knob) */}
+                      {/* Left Drag Handle (Start Time Knob with touch-none) */}
                       <div
                         onPointerDown={(e) =>
                           handlePointerDrag(e, index, rIdx, "start_time")
                         }
-                        className="absolute -left-2.5 top-1/2 -translate-y-1/2 w-4 h-6 bg-background border-2 border-primary rounded-full shadow-md cursor-ew-resize hover:scale-110 active:scale-125 z-20 flex items-center justify-center"
+                        className="absolute -left-3 top-1/2 -translate-y-1/2 w-5 h-7 bg-background border-2 border-primary rounded-full shadow-md cursor-ew-resize hover:scale-110 active:scale-125 z-20 flex items-center justify-center touch-none"
                         title={`Drag Start Time (${range.start_time})`}
                       >
-                        <div className="w-0.5 h-2 bg-muted-foreground rounded-full" />
+                        <div className="w-0.5 h-2.5 bg-muted-foreground/80 rounded-full" />
                       </div>
 
-                      {/* Right Drag Handle (End Time Knob) */}
+                      {/* Right Drag Handle (End Time Knob with touch-none) */}
                       <div
                         onPointerDown={(e) =>
                           handlePointerDrag(e, index, rIdx, "end_time")
                         }
-                        className="absolute -right-2.5 top-1/2 -translate-y-1/2 w-4 h-6 bg-background border-2 border-primary rounded-full shadow-md cursor-ew-resize hover:scale-110 active:scale-125 z-20 flex items-center justify-center"
+                        className="absolute -right-3 top-1/2 -translate-y-1/2 w-5 h-7 bg-background border-2 border-primary rounded-full shadow-md cursor-ew-resize hover:scale-110 active:scale-125 z-20 flex items-center justify-center touch-none"
                         title={`Drag End Time (${range.end_time})`}
                       >
-                        <div className="w-0.5 h-2 bg-muted-foreground rounded-full" />
+                        <div className="w-0.5 h-2.5 bg-muted-foreground/80 rounded-full" />
                       </div>
                     </div>
                   );
@@ -557,16 +562,16 @@ export default function SlotEditor({
                       setHoveredShift({ groupIndex: index, rangeIndex })
                     }
                     onMouseLeave={() => setHoveredShift(null)}
-                    className={`flex flex-wrap items-center gap-2 rounded-md border p-2.5 bg-card transition-all border-l-4 ${colors.border} ${
+                    className={`flex flex-wrap items-center gap-2 rounded-md border p-2 sm:p-2.5 bg-card transition-all border-l-4 ${colors.border} ${
                       isHovered ? "ring-2 ring-primary/40 shadow-sm" : ""
                     }`}
                   >
-                    <span className="text-xs font-bold min-w-16">
+                    <span className="text-xs font-bold min-w-14 sm:min-w-16">
                       Shift {rangeIndex + 1}:
                     </span>
 
                     {/* Start Time Select & Nudge Buttons */}
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-0.5 sm:gap-1">
                       <Button
                         type="button"
                         variant="ghost"
@@ -581,7 +586,7 @@ export default function SlotEditor({
                         control={control}
                         name={`slots.${index}.ranges.${rangeIndex}.start_time`}
                         render={({ field: start }) => (
-                          <FormItem className="min-w-32">
+                          <FormItem className="min-w-28 sm:min-w-32">
                             <Select
                               value={start.value}
                               onValueChange={start.onChange}
@@ -621,7 +626,7 @@ export default function SlotEditor({
                     <span className="text-xs font-medium text-muted-foreground">to</span>
 
                     {/* End Time Select & Nudge Buttons */}
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-0.5 sm:gap-1">
                       <Button
                         type="button"
                         variant="ghost"
@@ -636,7 +641,7 @@ export default function SlotEditor({
                         control={control}
                         name={`slots.${index}.ranges.${rangeIndex}.end_time`}
                         render={({ field: end }) => (
-                          <FormItem className="min-w-32">
+                          <FormItem className="min-w-28 sm:min-w-32">
                             <Select
                               value={end.value}
                               onValueChange={end.onChange}
