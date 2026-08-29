@@ -1,11 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Navigate, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { createSurvey } from "@/api";
 import NameplateInput from "@/components/NameplateInput";
+import PhoneEditor from "@/components/PhoneEditor";
 import SlotEditor from "@/components/SlotEditor";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,9 +39,19 @@ export default function DoctorPage() {
   // showing under the next doctor's form.
   const [resetKey, setResetKey] = useState(0);
 
+  // The hospital's common line, when it has one, is the starting point for
+  // every doctor filed there; the agent edits or replaces it per doctor.
+  const doctorDefaults = useCallback((): DoctorForm => {
+    const common = hospital?.phones ?? [];
+    return {
+      ...emptyDoctorValues(),
+      phones: common.length ? common.map((p) => ({ ...p })) : [{ value: "" }],
+    };
+  }, [hospital]);
+
   const form = useForm<DoctorForm>({
     resolver: zodResolver(doctorSchema),
-    defaultValues: emptyDoctorValues(),
+    defaultValues: doctorDefaults(),
   });
 
   if (!hospital) return <Navigate to="/" replace />;
@@ -79,7 +90,7 @@ export default function DoctorPage() {
       if (parsed.longitude.trim()) body.set("longitude", parsed.longitude.trim());
 
       await createSurvey(body);
-      form.reset(emptyDoctorValues());
+      form.reset(doctorDefaults());
       setNameplate(null);
       setResetKey((n) => n + 1);
       recordDoctor();
@@ -112,7 +123,7 @@ export default function DoctorPage() {
             navigate("/");
           }}
         >
-          Exit hospital
+          New hospital
         </Button>
       </section>
 
@@ -130,6 +141,12 @@ export default function DoctorPage() {
                   if (f) setNameplateError(null);
                 }}
                 error={nameplateError}
+              />
+
+              <PhoneEditor
+                control={form.control}
+                label="Phone numbers"
+                hint="Pre-filled from the hospital's common line when it has one."
               />
 
               <SlotEditor
