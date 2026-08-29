@@ -212,6 +212,28 @@ describe("schema split", () => {
     expect(doctorSchema.safeParse({ ...doctor, daily_patients: "0" }).success).toBe(false);
   });
 
+  it("accepts a doctor with no nameplate fields read", () => {
+    const parsed = doctorSchema.parse(doctor);
+    expect(parsed.doctor_name).toBe("");
+    expect(parsed.doctor_degrees).toBe("");
+    expect(parsed.doctor_specializations).toBe("");
+  });
+
+  it("keeps the fields the agent approved", () => {
+    const parsed = doctorSchema.parse({
+      ...doctor,
+      doctor_name: "  Rahman  ",
+      doctor_specializations: "Cardiology",
+    });
+    expect(parsed.doctor_name).toBe("Rahman");
+    expect(parsed.doctor_specializations).toBe("Cardiology");
+  });
+
+  it("rejects a doctor name longer than the column allows", () => {
+    const bad = { ...doctor, doctor_name: "x".repeat(201) };
+    expect(doctorSchema.safeParse(bad).success).toBe(false);
+  });
+
   it("builds empty values that compose back into surveySchema shape", () => {
     const composed = { ...emptyHospitalValues(), ...emptyDoctorValues() };
     expect(composed).toEqual(emptySurveyValues());

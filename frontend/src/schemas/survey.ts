@@ -140,6 +140,12 @@ const doctorShape = {
   ),
 
   slots: z.array(slotSchema).min(1, "Add at least one availability slot."),
+
+  // Read from the nameplate on upload and editable by the agent. Blank means
+  // no preview ran, which leaves the row to the background worker.
+  doctor_name: z.string().trim().max(200).default(""),
+  doctor_degrees: z.string().trim().max(1000).default(""),
+  doctor_specializations: z.string().trim().max(1000).default(""),
 };
 
 export const hospitalSchema = z.object(hospitalShape).superRefine(locationRule);
@@ -184,6 +190,9 @@ export const emptyHospitalValues = (): HospitalForm => ({
 
 export const emptyDoctorValues = (): DoctorForm => ({
   phones: [{ value: "" }],
+  doctor_name: "",
+  doctor_degrees: "",
+  doctor_specializations: "",
   daily_patients: "",
   avg_duration_min: "",
   consultation_fee_bdt: "",

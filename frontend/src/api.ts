@@ -29,6 +29,7 @@ export interface Survey {
   ocr_status: "pending" | "processing" | "done" | "failed";
   ocr_attempts: number;
   ocr_error: string | null;
+  ocr_source: "upload" | "worker" | "admin" | null;
   doctor_name: string | null;
   doctor_degrees: string | null;
   doctor_specializations: string | null;
@@ -141,6 +142,24 @@ export const createUser = (body: {
 export const listMySurveys = () => request<Survey[]>("/api/surveys");
 
 export const myStats = () => request<Stats>("/api/surveys/stats");
+
+export interface DoctorFields {
+  doctor_name: string | null;
+  doctor_degrees: string | null;
+  doctor_specializations: string | null;
+}
+
+/** Reads a nameplate without filing anything. Resolves to a falsy value when
+ *  the server has OCR switched off, which the form treats the same as a
+ *  failure: quiet, and the worker reads it after submit. */
+export const previewNameplate = (file: File) => {
+  const body = new FormData();
+  body.set("nameplate", file);
+  return request<DoctorFields | null>("/api/surveys/nameplate/preview", {
+    method: "POST",
+    body,
+  });
+};
 
 export const createSurvey = (form: FormData) =>
   request<Survey>("/api/surveys", { method: "POST", body: form });
