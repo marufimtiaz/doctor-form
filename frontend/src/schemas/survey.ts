@@ -52,75 +52,92 @@ export const slotSchema = z.object({
   ranges: z.array(timeRangeSchema).min(1, "Add at least one time range."),
 });
 
+const locationRule = (
+  v: { latitude: string; district: string; city: string; longitude: string },
+  ctx: z.RefinementCtx,
+) => {
+  // Mirrors ck_surveys_location and the backend's SurveyCreate validator:
+  // either precise coordinates or a named place, each all-or-nothing.
+  const hasLat = v.latitude.trim() !== "";
+  const hasLng = v.longitude.trim() !== "";
+  const hasCity = v.city.trim() !== "";
+  const hasDistrict = v.district.trim() !== "";
+
+  if (hasLat !== hasLng) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["longitude"],
+      message: "Give both latitude and longitude, or neither.",
+    });
+  }
+  if (hasCity !== hasDistrict) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["district"],
+      message: "Give both city and district, or neither.",
+    });
+  }
+  if (!hasLat && !hasCity) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["city"],
+      message: "Provide coordinates or city and district.",
+    });
+  }
+};
+
+// Shapes rather than finished schemas: z.object().superRefine() returns a
+// ZodEffects, which cannot be merged, so the combined schema has to be built
+// from the raw shapes.
+const hospitalShape = {
+  hospital_name: z.string().trim().min(1, "Hospital name is required.").max(200),
+  has_emergency_service: z.boolean().default(false),
+
+  city: z.string().max(100).default(""),
+  district: z.string().max(100).default(""),
+  latitude: z
+    .string()
+    .default("")
+    .refine(
+      (v) => v.trim() === "" || (Number(v) >= -90 && Number(v) <= 90),
+      "Latitude must be between -90 and 90.",
+    ),
+  longitude: z
+    .string()
+    .default("")
+    .refine(
+      (v) => v.trim() === "" || (Number(v) >= -180 && Number(v) <= 180),
+      "Longitude must be between -180 and 180.",
+    ),
+
+  // useFieldArray needs objects, not bare strings.
+  phones: z
+    .array(z.object({ value: z.string().trim().min(1, "Enter a number.") }))
+    .min(1, "Add at least one phone number."),
+};
+
+const doctorShape = {
+  daily_patients: numeric("Enter a number.", (n) =>
+    n.int().positive("Must be more than zero."),
+  ),
+  avg_duration_min: numeric("Enter a number.", (n) =>
+    n.int().positive("Must be more than zero."),
+  ),
+  consultation_fee_bdt: numeric("Enter a number.", (n) =>
+    n.int().min(0, "Cannot be negative."),
+  ),
+
+  slots: z.array(slotSchema).min(1, "Add at least one availability slot."),
+};
+
+export const hospitalSchema = z.object(hospitalShape).superRefine(locationRule);
+export const doctorSchema = z.object(doctorShape);
 export const surveySchema = z
-  .object({
-    hospital_name: z.string().trim().min(1, "Hospital name is required.").max(200),
-    has_emergency_service: z.boolean().default(false),
+  .object({ ...hospitalShape, ...doctorShape })
+  .superRefine(locationRule);
 
-    city: z.string().max(100).default(""),
-    district: z.string().max(100).default(""),
-    latitude: z
-      .string()
-      .default("")
-      .refine(
-        (v) => v.trim() === "" || (Number(v) >= -90 && Number(v) <= 90),
-        "Latitude must be between -90 and 90.",
-      ),
-    longitude: z
-      .string()
-      .default("")
-      .refine(
-        (v) => v.trim() === "" || (Number(v) >= -180 && Number(v) <= 180),
-        "Longitude must be between -180 and 180.",
-      ),
-
-    daily_patients: numeric("Enter a number.", (n) =>
-      n.int().positive("Must be more than zero."),
-    ),
-    avg_duration_min: numeric("Enter a number.", (n) =>
-      n.int().positive("Must be more than zero."),
-    ),
-    consultation_fee_bdt: numeric("Enter a number.", (n) =>
-      n.int().min(0, "Cannot be negative."),
-    ),
-
-    slots: z.array(slotSchema).min(1, "Add at least one availability slot."),
-    // useFieldArray needs objects, not bare strings.
-    phones: z
-      .array(z.object({ value: z.string().trim().min(1, "Enter a number.") }))
-      .min(1, "Add at least one phone number."),
-  })
-  .superRefine((v, ctx) => {
-    // Mirrors ck_surveys_location and the backend's SurveyCreate validator:
-    // either precise coordinates or a named place, each all-or-nothing.
-    const hasLat = v.latitude.trim() !== "";
-    const hasLng = v.longitude.trim() !== "";
-    const hasCity = v.city.trim() !== "";
-    const hasDistrict = v.district.trim() !== "";
-
-    if (hasLat !== hasLng) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["longitude"],
-        message: "Give both latitude and longitude, or neither.",
-      });
-    }
-    if (hasCity !== hasDistrict) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["district"],
-        message: "Give both city and district, or neither.",
-      });
-    }
-    if (!hasLat && !hasCity) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["city"],
-        message: "Provide coordinates or city and district.",
-      });
-    }
-  });
-
+export type HospitalForm = z.input<typeof hospitalSchema>;
+export type DoctorForm = z.input<typeof doctorSchema>;
 export type SurveyForm = z.input<typeof surveySchema>;
 export type SurveyOutput = z.output<typeof surveySchema>;
 
@@ -143,16 +160,24 @@ export const emptySlot = () => ({
   ranges: [{ ...EVENING_CHAMBER }],
 });
 
-export const emptySurveyValues = (): SurveyForm => ({
+export const emptyHospitalValues = (): HospitalForm => ({
   hospital_name: "",
   has_emergency_service: false,
   city: "",
   district: "",
   latitude: "",
   longitude: "",
+  phones: [{ value: "" }],
+});
+
+export const emptyDoctorValues = (): DoctorForm => ({
   daily_patients: "",
   avg_duration_min: "",
   consultation_fee_bdt: "",
   slots: [emptySlot()],
-  phones: [{ value: "" }],
+});
+
+export const emptySurveyValues = (): SurveyForm => ({
+  ...emptyHospitalValues(),
+  ...emptyDoctorValues(),
 });

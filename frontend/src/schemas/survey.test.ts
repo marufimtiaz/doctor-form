@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { emptySlot, surveySchema, toBackendSlots } from "./survey";
+import {
+  doctorSchema,
+  emptyDoctorValues,
+  emptyHospitalValues,
+  emptySlot,
+  emptySurveyValues,
+  hospitalSchema,
+  surveySchema,
+  toBackendSlots,
+} from "./survey";
 
 /** A valid form, minus location - each test supplies its own. */
 const base = {
@@ -139,5 +148,62 @@ describe("phones and numbers", () => {
   it("coerces numeric strings from the inputs", () => {
     const result = parse(withCity);
     expect(result.success && result.data.daily_patients).toBe(30);
+  });
+});
+
+describe("schema split", () => {
+  const hospital = {
+    hospital_name: "Square Hospital",
+    has_emergency_service: false,
+    city: "Dhaka",
+    district: "Dhaka",
+    latitude: "",
+    longitude: "",
+    phones: [{ value: "01712345678" }],
+  };
+  const doctor = {
+    daily_patients: "30",
+    avg_duration_min: "10",
+    consultation_fee_bdt: "800",
+    slots: [emptySlot()],
+  };
+
+  it("composes into a value surveySchema accepts", () => {
+    expect(surveySchema.safeParse({ ...hospital, ...doctor }).success).toBe(true);
+  });
+
+  it("accepts the hospital half on its own", () => {
+    expect(hospitalSchema.safeParse(hospital).success).toBe(true);
+  });
+
+  it("accepts the doctor half on its own", () => {
+    expect(doctorSchema.safeParse(doctor).success).toBe(true);
+  });
+
+  it("still rejects half a coordinate pair from hospitalSchema", () => {
+    const bad = { ...hospital, city: "", district: "", latitude: "23.8" };
+    expect(hospitalSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("still rejects city without district from hospitalSchema", () => {
+    const bad = { ...hospital, district: "" };
+    expect(hospitalSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("requires at least one phone on the hospital half", () => {
+    expect(hospitalSchema.safeParse({ ...hospital, phones: [] }).success).toBe(false);
+  });
+
+  it("requires at least one slot group on the doctor half", () => {
+    expect(doctorSchema.safeParse({ ...doctor, slots: [] }).success).toBe(false);
+  });
+
+  it("rejects zero patients per day on the doctor half", () => {
+    expect(doctorSchema.safeParse({ ...doctor, daily_patients: "0" }).success).toBe(false);
+  });
+
+  it("builds empty values that compose back into surveySchema shape", () => {
+    const composed = { ...emptyHospitalValues(), ...emptyDoctorValues() };
+    expect(composed).toEqual(emptySurveyValues());
   });
 });
