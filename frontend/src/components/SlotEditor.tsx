@@ -229,14 +229,14 @@ export default function SlotEditor({
       ? currentDays.filter((d) => d !== day)
       : [...currentDays, day];
     setValue(`slots.${slotIndex}.days`, nextDays, {
-      shouldValidate: true,
+      shouldValidate: false,
       shouldDirty: true,
     });
   };
 
   const applyPreset = (slotIndex: number, days: DayName[]) => {
     setValue(`slots.${slotIndex}.days`, days, {
-      shouldValidate: true,
+      shouldValidate: false,
       shouldDirty: true,
     });
   };
@@ -244,7 +244,7 @@ export default function SlotEditor({
   const updateSortedRanges = (slotIndex: number, ranges: Array<{ start_time: string; end_time: string }>) => {
     const sorted = sortRanges(ranges);
     setValue(`slots.${slotIndex}.ranges`, sorted, {
-      shouldValidate: true,
+      shouldValidate: false,
       shouldDirty: true,
     });
   };
@@ -387,7 +387,7 @@ export default function SlotEditor({
                           type="button"
                           variant={isSelected ? "default" : "outline"}
                           size="sm"
-                          className="h-8 px-3 text-xs font-medium"
+                          className="h-8 px-3 text-xs font-medium touch-manipulation select-none active:scale-95 transition-transform duration-75"
                           onClick={() => toggleDay(index, day)}
                         >
                           {day}
