@@ -1,4 +1,4 @@
-import { Camera, ImageUp } from "lucide-react";
+import { Camera, ImageUp, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,7 @@ export default function NameplateInput({
   const openPicker = (source: "camera" | "library") => {
     const el = inputRef.current;
     if (!el) return;
+    el.value = "";
     if (source === "camera") el.setAttribute("capture", "environment");
     else el.removeAttribute("capture");
     el.click();
@@ -99,6 +100,21 @@ export default function NameplateInput({
         >
           <ImageUp className="size-4" aria-hidden /> Upload image
         </Button>
+        {file && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => {
+              if (inputRef.current) inputRef.current.value = "";
+              setSizeError(null);
+              onChange(null);
+            }}
+          >
+            <Trash2 className="size-4" aria-hidden /> Remove photo
+          </Button>
+        )}
       </div>
       {message && <p className="text-sm text-destructive">{message}</p>}
       {preview && (
