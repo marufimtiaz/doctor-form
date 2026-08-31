@@ -48,6 +48,7 @@ export interface Stats {
 export interface AgentStat {
   user_id: string;
   name: string;
+  company?: string | null;
   total: number;
   today: number;
 }

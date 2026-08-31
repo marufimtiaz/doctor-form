@@ -60,11 +60,7 @@ export default function NameplateInput({
 
   return (
     <fieldset className="space-y-3 rounded-lg border p-4">
-      <Label className="text-sm font-medium">Doctor nameplate photo</Label>
-      <p className="text-xs text-muted-foreground">
-        Required. The doctor&apos;s name, degrees and specializations are read
-        from this image later.
-      </p>
+      <Label className="text-sm font-medium text-center block">Doctor nameplate photo</Label>
       <input
         ref={inputRef}
         type="file"
@@ -83,24 +79,36 @@ export default function NameplateInput({
           onChange(picked);
         }}
       />
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => openPicker("camera")}
-        >
-          <Camera className="size-4" aria-hidden /> Open camera
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => openPicker("library")}
-        >
-          <ImageUp className="size-4" aria-hidden /> Upload image
-        </Button>
-        {file && (
+      {!file && (
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 w-full sm:max-w-md mx-auto">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto aspect-square flex-col justify-center items-center gap-2.5 rounded-2xl border-2 border-dashed p-4 text-center font-medium shadow-xs transition-colors hover:border-primary hover:bg-accent/50 active:scale-[0.98]"
+            onClick={() => openPicker("camera")}
+          >
+            <div className="rounded-full bg-primary/10 p-3 text-primary">
+              <Camera className="size-6 sm:size-8" aria-hidden />
+            </div>
+            <span className="text-sm font-medium">Open camera</span>
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto aspect-square flex-col justify-center items-center gap-2.5 rounded-2xl border-2 border-dashed p-4 text-center font-medium shadow-xs transition-colors hover:border-primary hover:bg-accent/50 active:scale-[0.98]"
+            onClick={() => openPicker("library")}
+          >
+            <div className="rounded-full bg-primary/10 p-3 text-primary">
+              <ImageUp className="size-6 sm:size-8" aria-hidden />
+            </div>
+            <span className="text-sm font-medium">Upload image</span>
+          </Button>
+        </div>
+      )}
+
+      {file && (
+        <div className="flex justify-center">
           <Button
             type="button"
             variant="outline"
@@ -114,18 +122,20 @@ export default function NameplateInput({
           >
             <Trash2 className="size-4" aria-hidden /> Remove photo
           </Button>
-        )}
-      </div>
-      {message && <p className="text-sm text-destructive">{message}</p>}
+        </div>
+      )}
+      {message && <p className="text-center text-sm text-destructive">{message}</p>}
       {preview && (
-        <img
-          src={preview}
-          alt="Nameplate preview"
-          className="max-h-56 rounded-md border object-contain"
-        />
+        <div className="flex justify-center">
+          <img
+            src={preview}
+            alt="Nameplate preview"
+            className="max-h-56 rounded-md border object-contain"
+          />
+        </div>
       )}
       {file && !message && (
-        <p className="text-xs text-muted-foreground">{file.name}</p>
+        <p className="text-center text-xs text-muted-foreground">{file.name}</p>
       )}
     </fieldset>
   );

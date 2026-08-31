@@ -1,0 +1,90 @@
+{
+  "nav": {
+    "hospitals": "Hospitals",
+    "doctors": "Doctors",
+    "surveys": "Surveys",
+    "account": "Account",
+    "admin": "Admin"
+  },
+  "header": {
+    "doctor_form": "Doctor Form",
+    "new_hospital": "New hospital",
+    "filed": "filed",
+    "filed_plural": "filed"
+  },
+  "hospital": {
+    "title": "New hospital",
+    "hospital_name": "Hospital name",
+    "emergency_service": "Emergency Service (12am afterwards)",
+    "emergency_yes": "Yes (24/7 Emergency)",
+    "emergency_no": "No (Standard Hours)",
+    "location_details": "Location Details",
+    "locate_me": "Locate Me",
+    "locating_gps": "Locating GPS position…",
+    "update_gps": "Update GPS Location",
+    "gps_coords": "GPS Coords",
+    "gps_denied": "GPS denied or unavailable. Please fill in City & District below.",
+    "city_placeholder": "City (e.g. Savar)",
+    "district_placeholder": "District (e.g. Dhaka)",
+    "common_booking_number": "Common booking number (optional)",
+    "add_common_number": "Add common number",
+    "start_adding_doctors": "Start adding doctors"
+  },
+  "doctor": {
+    "nameplate_photo": "Nameplate Photo",
+    "nameplate_hint": "Upload doctor's chamber nameplate photo for OCR auto-fill",
+    "ocr_reading": "Reading nameplate…",
+    "ocr_autofilled": "Auto-filled from OCR",
+    "ocr_unreadable": "Nameplate unreadable",
+    "ocr_idle": "Auto-fills doctor name & specialties from photo",
+    "doctor_details": "Doctor Details",
+    "doctor_name": "Doctor Name",
+    "doctor_name_placeholder": "e.g. Prof. Dr. MD. Rahim Uddin",
+    "degrees": "Degrees",
+    "degrees_placeholder": "e.g. MBBS, FCPS (Medicine)",
+    "specializations": "Speciality",
+    "specializations_placeholder": "e.g. Cardiologist, Neurologist",
+    "phone_numbers": "Phone Numbers",
+    "add_phone_number": "Add phone number",
+    "phone_placeholder": "e.g. 01712345678",
+    "daily_patients": "Daily Patients",
+    "daily_patients_unit": "pts/day",
+    "visit_fee": "Visit Fee",
+    "fee_unit": "৳",
+    "avg_duration": "Average Visit Duration",
+    "duration_unit": "min",
+    "availability_schedule": "Availability Schedule",
+    "group": "Group",
+    "select_days": "Select Days",
+    "weekend": "Weekend",
+    "weekdays": "Weekdays",
+    "all_days": "All Days",
+    "clear": "Clear",
+    "selected_elsewhere": "Selected in another group",
+    "add_shift_range": "Shift",
+    "add_more_days": "Add More Days",
+    "time_shift_ranges": "Time Shift Ranges",
+    "shift": "Shift",
+    "file_doctor": "File doctor and add another",
+    "filing": "Filing…",
+    "filed_success": "Doctor filed. Next doctor?"
+  },
+  "surveys": {
+    "title": "Filed Surveys",
+    "search_placeholder": "Search doctor, hospital, or district…",
+    "no_surveys": "No surveys filed yet."
+  },
+  "account": {
+    "title": "Agent Account",
+    "sign_out": "Sign out"
+  },
+  "days": {
+    "Sat": "Sat",
+    "Sun": "Sun",
+    "Mon": "Mon",
+    "Tue": "Tue",
+    "Wed": "Wed",
+    "Thu": "Thu",
+    "Fri": "Fri"
+  }
+}

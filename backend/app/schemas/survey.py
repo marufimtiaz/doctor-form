@@ -131,6 +131,7 @@ class StatsRead(BaseModel):
 class AgentStat(BaseModel):
     user_id: UUID
     name: str
+    company: str | None = None
     total: int
     today: int
 

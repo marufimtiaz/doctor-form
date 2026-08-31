@@ -1,7 +1,9 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useCallback, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
-import { Navigate, useNavigate } from "react-router-dom";
+import { AlertCircle, CheckCircle2, Loader2, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
+import { useTranslation } from "react-i18next";
+import { Navigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { createSurvey, previewNameplate } from "@/api";
@@ -21,6 +23,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useHospital } from "@/hospital";
+import { useAutoDistractFree } from "@/hooks/useAutoDistractFree";
+import {
+  base64ToFile,
+  clearDoctorDraft,
+  fileToBase64,
+  readDoctorDraft,
+  writeDoctorDraft,
+} from "@/lib/doctorDraft";
+import { cn } from "@/lib/utils";
 import {
   doctorSchema,
   emptyDoctorValues,
@@ -30,8 +41,9 @@ import {
 } from "@/schemas/survey";
 
 export default function DoctorPage() {
-  const navigate = useNavigate();
-  const { hospital, doctorsAdded, recordDoctor, exitHospital } = useHospital();
+  const { t } = useTranslation();
+  const { hospital, recordDoctor } = useHospital();
+  const navHidden = useAutoDistractFree();
 
   const [nameplate, setNameplate] = useState<File | null>(null);
   const [nameplateError, setNameplateError] = useState<string | null>(null);
@@ -63,6 +75,63 @@ export default function DoctorPage() {
     resolver: zodResolver(doctorSchema),
     defaultValues: doctorDefaults(),
   });
+
+  const watchedValues = useWatch({ control: form.control });
+  const isFormComplete =
+    Boolean(nameplate) && doctorSchema.safeParse(watchedValues).success;
+
+  // Restore draft on mount if available
+  useEffect(() => {
+    const draft = readDoctorDraft();
+    if (draft?.values) {
+      form.reset(draft.values);
+      if (draft.nameplateBase64 && draft.nameplateName) {
+        try {
+          const f = base64ToFile(
+            draft.nameplateBase64,
+            draft.nameplateName,
+            draft.nameplateType ?? undefined,
+          );
+          setNameplate(f);
+        } catch {
+          // ignore corrupted base64
+        }
+      }
+    }
+  }, [form]);
+
+  // Save draft whenever form values or nameplate change
+  useEffect(() => {
+    let active = true;
+    const save = async (values: DoctorForm, file: File | null) => {
+      let b64: string | null = null;
+      if (file) {
+        try {
+          b64 = await fileToBase64(file);
+        } catch {
+          b64 = null;
+        }
+      }
+      if (!active) return;
+      writeDoctorDraft({
+        values,
+        nameplateBase64: b64,
+        nameplateName: file?.name ?? null,
+        nameplateType: file?.type ?? null,
+      });
+    };
+
+    const subscription = form.watch((v) => {
+      void save(v as DoctorForm, nameplate);
+    });
+
+    void save(form.getValues(), nameplate);
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, [form, nameplate]);
 
   const readNameplate = async (picked: File | null) => {
     const token = ++previewToken.current;
@@ -135,6 +204,7 @@ export default function DoctorPage() {
       if (parsed.longitude.trim()) body.set("longitude", parsed.longitude.trim());
 
       await createSurvey(body);
+      clearDoctorDraft();
       form.reset(doctorDefaults());
       setNameplate(null);
       setResetKey((n) => n + 1);
@@ -150,47 +220,16 @@ export default function DoctorPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 px-4 py-8">
-      <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">
-            {hospital.hospital_name}
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            {doctorsAdded === 0
-              ? "No doctors filed yet"
-              : `${doctorsAdded} doctor${doctorsAdded > 1 ? "s" : ""} filed here`}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            exitHospital();
-            navigate("/");
-          }}
-        >
-          New hospital
-        </Button>
-      </section>
-
+    <main className="mx-auto max-w-3xl space-y-5 px-4 py-4 sm:py-6">
       <Card>
         <CardContent>
           <Form {...form}>
-            {/* react-hooks/refs cannot see that onSubmit only ever runs from a
-                submit event, which is exactly where the rule's own message says
-                a ref belongs. It reaches previewToken through readNameplate, to
-                discard a preview still in flight for the doctor just filed. */}
-            {/* eslint-disable-next-line react-hooks/refs */}
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
               <NameplateInput
                 key={resetKey}
                 file={nameplate}
                 onChange={(f) => {
                   setNameplate(f);
-                  // Otherwise the destructive "required" text sits under a
-                  // perfectly valid image until the next submit attempt.
                   if (f) setNameplateError(null);
                   void readNameplate(f);
                 }}
@@ -198,25 +237,37 @@ export default function DoctorPage() {
               />
 
               <fieldset className="space-y-3 rounded-lg border p-4">
-                <div>
-                  <Label className="text-sm font-medium">Doctor details</Label>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {ocrState === "reading"
-                      ? "Reading the nameplate…"
-                      : ocrState === "done"
-                        ? "Read from the nameplate. Correct anything that is wrong."
-                        : ocrState === "failed"
-                          ? "Couldn't read the nameplate. It will be read after filing."
-                          : "Filled in from the nameplate photo once you add one."}
-                  </p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label className="text-sm font-medium">{t("doctor.doctor_details")}</Label>
+                  {ocrState === "reading" ? (
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-0.5 text-xs font-medium text-sky-700 border border-sky-200 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-800">
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                      {t("doctor.ocr_reading")}
+                    </div>
+                  ) : ocrState === "done" ? (
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800">
+                      <CheckCircle2 className="size-3.5" aria-hidden />
+                      {t("doctor.ocr_autofilled")}
+                    </div>
+                  ) : ocrState === "failed" ? (
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 border border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800">
+                      <AlertCircle className="size-3.5" aria-hidden />
+                      {t("doctor.ocr_unreadable")}
+                    </div>
+                  ) : (
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-muted/60 px-2.5 py-0.5 text-xs font-medium text-muted-foreground border">
+                      <Sparkles className="size-3.5 text-primary" aria-hidden />
+                      {t("doctor.ocr_idle")}
+                    </div>
+                  )}
                 </div>
                 {(
                   [
-                    ["doctor_name", "Name"],
-                    ["doctor_degrees", "Degrees"],
-                    ["doctor_specializations", "Specializations"],
+                    ["doctor_name", t("doctor.doctor_name"), t("doctor.doctor_name_placeholder")],
+                    ["doctor_degrees", t("doctor.degrees"), t("doctor.degrees_placeholder")],
+                    ["doctor_specializations", t("doctor.specializations"), t("doctor.specializations_placeholder")],
                   ] as const
-                ).map(([name, label]) => (
+                ).map(([name, label, placeholder]) => (
                   <FormField
                     key={name}
                     control={form.control}
@@ -227,6 +278,7 @@ export default function DoctorPage() {
                         <FormControl>
                           <Input
                             {...field}
+                            placeholder={placeholder}
                             value={field.value ?? ""}
                             disabled={ocrState === "reading"}
                           />
@@ -240,8 +292,8 @@ export default function DoctorPage() {
 
               <PhoneEditor
                 control={form.control}
-                label="Phone numbers"
-                hint="Pre-filled from the hospital's common line when it has one."
+                label={t("doctor.phone_numbers")}
+                addLabel={t("doctor.add_phone_number")}
               />
 
               <SlotEditor
@@ -256,14 +308,20 @@ export default function DoctorPage() {
                   name="daily_patients"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Patients per day</FormLabel>
+                      <FormLabel className="text-xs">{t("doctor.daily_patients")}</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          min={1}
-                          {...field}
-                          value={(field.value as string | number) ?? ""}
-                        />
+                        <div className="relative flex items-center">
+                          <Input
+                            type="number"
+                            min={1}
+                            className="pr-16"
+                            {...field}
+                            value={(field.value as string | number) ?? ""}
+                          />
+                          <span className="pointer-events-none absolute right-3 text-xs text-muted-foreground font-medium">
+                            {t("doctor.daily_patients_unit")}
+                          </span>
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -273,15 +331,21 @@ export default function DoctorPage() {
                   control={form.control}
                   name="avg_duration_min"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Minutes per patient</FormLabel>
+                    <FormItem className="text-xs">
+                      <FormLabel className="text-xs">{t("doctor.avg_duration")}</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          min={1}
-                          {...field}
-                          value={(field.value as string | number) ?? ""}
-                        />
+                        <div className="relative flex items-center">
+                          <Input
+                            type="number"
+                            min={1}
+                            className="pr-12"
+                            {...field}
+                            value={(field.value as string | number) ?? ""}
+                          />
+                          <span className="pointer-events-none absolute right-3 text-xs text-muted-foreground font-medium">
+                            {t("doctor.duration_unit")}
+                          </span>
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -292,14 +356,20 @@ export default function DoctorPage() {
                   name="consultation_fee_bdt"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Fee (BDT)</FormLabel>
+                      <FormLabel className="text-xs">{t("doctor.visit_fee")}</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          {...field}
-                          value={(field.value as string | number) ?? ""}
-                        />
+                        <div className="relative flex items-center">
+                          <span className="pointer-events-none absolute left-3 text-xs font-bold text-muted-foreground">
+                            {t("doctor.fee_unit")}
+                          </span>
+                          <Input
+                            type="number"
+                            min={0}
+                            className="pl-7"
+                            {...field}
+                            value={(field.value as string | number) ?? ""}
+                          />
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -307,13 +377,25 @@ export default function DoctorPage() {
                 />
               </div>
 
-              <Button
-                type="submit"
-                className="w-full sm:w-auto"
-                disabled={form.formState.isSubmitting}
-              >
-                {form.formState.isSubmitting ? "Filing…" : "File doctor and add another"}
-              </Button>
+              {isFormComplete && (
+                <div
+                  className={cn(
+                    "sticky z-10 py-3 transition-[bottom,transform] duration-300 ease-in-out sm:static sm:p-0 animate-in fade-in-0 slide-in-from-bottom-2",
+                    navHidden
+                      ? "bottom-1"
+                      : "bottom-[calc(3.5rem+env(safe-area-inset-bottom))]",
+                  )}
+                >
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full sm:w-auto font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xl shadow-primary/20 active:scale-[0.99] transition-all"
+                    disabled={form.formState.isSubmitting}
+                  >
+                    {form.formState.isSubmitting ? t("doctor.filing") : t("doctor.file_doctor")}
+                  </Button>
+                </div>
+              )}
             </form>
           </Form>
         </CardContent>

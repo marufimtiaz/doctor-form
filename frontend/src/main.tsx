@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "@/App";
 import { AuthProvider } from "@/auth";
 import { HospitalProvider } from "@/hospital";
+import "@/i18n/config";
 import "./index.css";
 
 const root = document.getElementById("root");

@@ -5,7 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { describePlace, describeSlot } from "@/lib/formatters";
+import { describePlace } from "@/lib/formatters";
 
 export default function SurveysPage() {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -89,10 +89,10 @@ export default function SurveysPage() {
           {mine.map((s) => (
             <li key={s.id}>
               <Card>
-                <CardContent className="space-y-1 p-4 text-sm">
+                <CardContent className="space-y-2 p-4 text-sm">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">{s.hospital_name}</span>
+                      <span className="font-semibold text-base">{s.hospital_name}</span>
                       {s.has_emergency_service && (
                         <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700 dark:bg-red-950 dark:text-red-300">
                           🚨 Emergency Service
@@ -103,25 +103,53 @@ export default function SurveysPage() {
                       {new Date(s.created_at).toLocaleString()}
                     </time>
                   </div>
-                  <div className="text-muted-foreground">{describePlace(s)}</div>
-                  <div className="text-muted-foreground">
-                    {s.slots.map(describeSlot).join(" · ")}
+
+                  <div className="rounded-md bg-muted/40 p-2.5 space-y-0.5 border">
+                    <div className="font-medium text-foreground">
+                      {s.doctor_name ? (
+                        s.doctor_name
+                      ) : (
+                        <span className="text-muted-foreground text-xs italic">
+                          {s.ocr_status === "failed"
+                            ? "Could not read nameplate"
+                            : s.ocr_status === "processing"
+                              ? "Reading nameplate…"
+                              : "Nameplate details pending"}
+                        </span>
+                      )}
+                    </div>
+                    {s.doctor_degrees && (
+                      <div className="text-xs text-muted-foreground">
+                        {s.doctor_degrees}
+                      </div>
+                    )}
+                    {s.doctor_specializations && (
+                      <div className="text-xs text-muted-foreground font-medium">
+                        {s.doctor_specializations}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-muted-foreground">
-                    {s.phones.join(" · ")}
-                  </div>
+
+                  {describePlace(s) && (
+                    <div className="text-muted-foreground">{describePlace(s)}</div>
+                  )}
+                  {s.phones.length > 0 && (
+                    <div className="text-muted-foreground">
+                      {s.phones.join(" · ")}
+                    </div>
+                  )}
                   <div className="text-muted-foreground">
                     {s.daily_patients}/day · {s.avg_duration_min} min · ৳
                     {s.consultation_fee_bdt}
                   </div>
                   {s.nameplate_url && (
                     <a
-                      className="text-primary underline underline-offset-4"
+                      className="inline-block text-xs font-medium text-primary underline underline-offset-4"
                       href={s.nameplate_url}
                       target="_blank"
                       rel="noreferrer"
                     >
-                      View nameplate
+                      View original nameplate
                     </a>
                   )}
                 </CardContent>

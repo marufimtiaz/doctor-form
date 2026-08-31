@@ -34,6 +34,8 @@ import {
   timeToPercent,
   type TimeRange,
 } from "@/lib/shifts";
+import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 import {
   DAY_NAMES,
   emptySlot,
@@ -42,10 +44,15 @@ import {
 } from "@/schemas/survey";
 
 const PRESETS: { label: string; days: DayName[] }[] = [
-  { label: "Weekend", days: ["Sat", "Sun"] },
-  { label: "Weekdays", days: ["Mon", "Tue", "Wed", "Thu"] },
+  { label: "Weekend", days: ["Fri", "Sat"] },
+  { label: "Weekdays", days: ["Sun", "Mon", "Tue", "Wed", "Thu"] },
   { label: "All Days", days: ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"] },
 ];
+
+function isPresetActive(presetDays: DayName[], selectedDays: DayName[]): boolean {
+  if (presetDays.length !== selectedDays.length) return false;
+  return presetDays.every((d) => selectedDays.includes(d));
+}
 
 function getShiftColorScheme(startStr: string) {
   if (!startStr) return { bg: "bg-primary", border: "border-primary", text: "text-primary bg-primary/10" };
@@ -88,7 +95,11 @@ export default function SlotEditor({
   const timelineRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   const applyPreset = (slotIndex: number, days: DayName[]) => {
-    setValue(`slots.${slotIndex}.days`, days, {
+    const otherSelected = (getValues("slots") || []).flatMap((slot, gIdx) =>
+      gIdx !== slotIndex ? slot?.days || [] : [],
+    );
+    const availableDays = days.filter((d) => !otherSelected.includes(d));
+    setValue(`slots.${slotIndex}.days`, availableDays, {
       shouldValidate: false,
       shouldDirty: true,
     });
@@ -171,10 +182,19 @@ export default function SlotEditor({
     window.addEventListener("pointerup", onPointerUp);
   };
 
+  const { t } = useTranslation();
+
+  const getPresetLabel = (label: string) => {
+    if (label === "Weekend") return t("doctor.weekend");
+    if (label === "Weekdays") return t("doctor.weekdays");
+    if (label === "All Days") return t("doctor.all_days");
+    return label;
+  };
+
   return (
     <fieldset className="space-y-6 rounded-lg border p-3 sm:p-4 bg-card">
       <div className="flex items-center justify-between border-b pb-3">
-        <Label className="text-sm sm:text-base font-bold">Availability Schedule</Label>
+        <Label className="text-sm sm:text-base font-bold">{t("doctor.availability_schedule")}</Label>
       </div>
 
       {fields.map((field, index) => {
@@ -189,50 +209,65 @@ export default function SlotEditor({
         const freeSlotAvailable =
           currentRanges.length < 2 && suggestSecondShift(currentRanges) !== null;
 
+        const currentDays = slotsValue?.[index]?.days ?? field.days ?? [];
+
         return (
           <div
             key={field.id}
             className="space-y-4 rounded-lg border bg-background p-3 sm:p-4 shadow-sm transition-all"
           >
             {/* Slot Header */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Group {index + 1}
-              </span>
-              <div className="flex flex-wrap items-center gap-1 text-xs">
-                {PRESETS.map((preset) => (
-                  <Button
-                    key={preset.label}
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => applyPreset(index, preset.days)}
-                  >
-                    {preset.label}
-                  </Button>
-                ))}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs text-muted-foreground"
-                  onClick={() => applyPreset(index, [])}
-                >
-                  Clear
-                </Button>
+            <div className="space-y-2 border-b pb-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  {t("doctor.group")} {index + 1}
+                </span>
                 {fields.length > 1 && (
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-destructive"
+                    className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 -mr-1"
                     onClick={() => remove(index)}
+                    title="Remove schedule group"
                     aria-label="Remove slot group"
                   >
                     <X className="size-4" aria-hidden />
                   </Button>
                 )}
+              </div>
+
+              {/* Presets Row */}
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                {PRESETS.map((preset) => {
+                  const isActive = isPresetActive(preset.days, currentDays);
+                  return (
+                    <Button
+                      key={preset.label}
+                      type="button"
+                      variant={isActive ? "secondary" : "ghost"}
+                      size="sm"
+                      className={cn(
+                        "h-7 px-2.5 text-xs transition-all",
+                        isActive
+                          ? "bg-primary text-primary-foreground font-semibold shadow-xs hover:bg-primary/90"
+                          : "bg-muted/60 text-muted-foreground hover:bg-accent hover:text-foreground",
+                      )}
+                      onClick={() => applyPreset(index, preset.days)}
+                    >
+                      {getPresetLabel(preset.label)}
+                    </Button>
+                  );
+                })}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2.5 text-xs text-muted-foreground"
+                  onClick={() => applyPreset(index, [])}
+                >
+                  {t("doctor.clear")}
+                </Button>
               </div>
             </div>
 
@@ -242,7 +277,12 @@ export default function SlotEditor({
               name={`slots.${index}.days`}
               render={({ field: daysField }) => {
                 const selectedDays = daysField.value || [];
+                const selectedDaysInOtherGroups = (slotsValue || []).flatMap(
+                  (slot, gIdx) => (gIdx !== index ? slot?.days || [] : []),
+                );
+
                 const toggleDay = (day: DayName) => {
+                  if (selectedDaysInOtherGroups.includes(day)) return;
                   const exists = selectedDays.includes(day);
                   const next = exists
                     ? selectedDays.filter((d) => d !== day)
@@ -253,23 +293,35 @@ export default function SlotEditor({
                 return (
                   <FormItem className="space-y-1">
                     <span className="text-xs font-medium text-muted-foreground">
-                      Select Days:
+                      {t("doctor.select_days")}
                     </span>
                     <div className="flex flex-wrap gap-1.5">
                       {DAY_NAMES.map((day) => {
                         const isSelected = selectedDays.includes(day);
+                        const isTakenElsewhere =
+                          selectedDaysInOtherGroups.includes(day);
+
                         return (
                           <button
                             key={day}
                             type="button"
-                            className={`h-8 px-3 text-xs font-medium rounded-md border transition-none touch-manipulation select-none active:scale-95 ${
+                            disabled={isTakenElsewhere}
+                            title={
+                              isTakenElsewhere
+                                ? t("doctor.selected_elsewhere")
+                                : undefined
+                            }
+                            className={cn(
+                              "h-8 px-3 text-xs font-medium rounded-md border transition-none touch-manipulation select-none active:scale-95",
                               isSelected
                                 ? "bg-primary text-primary-foreground border-primary"
-                                : "bg-background text-foreground border-input hover:bg-accent"
-                            }`}
+                                : isTakenElsewhere
+                                ? "opacity-40 cursor-not-allowed bg-muted text-muted-foreground border-muted"
+                                : "bg-background text-foreground border-input hover:bg-accent",
+                            )}
                             onClick={() => toggleDay(day)}
                           >
-                            {day}
+                            {t(`days.${day}`)}
                           </button>
                         );
                       })}
@@ -281,30 +333,7 @@ export default function SlotEditor({
             />
 
             {/* Timeline Track Container */}
-            <div className="space-y-2 rounded-md bg-muted/40 p-2.5 sm:p-3">
-              <div className="flex items-center justify-between gap-2 border-b border-muted pb-1.5">
-                <span className="text-[11px] font-semibold text-muted-foreground">
-                  Timeline Track (8 AM – 12 AM)
-                </span>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={!freeSlotAvailable}
-                  className="h-6 px-2 text-[11px] font-semibold shrink-0"
-                  title={
-                    currentRanges.length >= 2
-                      ? "Max 2 handle pairs allowed per group"
-                      : !freeSlotAvailable
-                      ? "No free 30-min slot available"
-                      : "Add handle pair in farthest free slot"
-                  }
-                  onClick={() => addSmartHandle(index)}
-                >
-                  <Plus className="mr-1 size-3" /> Handle Pair
-                </Button>
-              </div>
-
+            <div className="space-y-2.5 rounded-md bg-muted/40 p-2.5 sm:p-3">
               <div className="flex justify-between text-[10px] font-medium text-muted-foreground w-full px-0.5">
                 <span>8 AM</span>
                 <span>12 PM</span>
@@ -371,6 +400,26 @@ export default function SlotEditor({
                   );
                 })}
               </div>
+
+              {/* Action row under timeline */}
+              <div className="flex justify-end pt-1 border-t border-muted/50">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!freeSlotAvailable}
+                  className="h-7 px-3 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
+                  title={
+                    currentRanges.length >= 2
+                      ? "Maximum 2 shifts allowed per group"
+                      : !freeSlotAvailable
+                      ? "No free time slot available"
+                      : "Add another shift range"
+                  }
+                  onClick={() => addSmartHandle(index)}
+                >
+                  <Plus className="mr-1 size-3.5" /> {t("doctor.add_shift_range")}
+                </Button>
+              </div>
             </div>
 
             {/* Overlap Conflict Warning Alert */}
@@ -386,7 +435,7 @@ export default function SlotEditor({
             {/* Shift Rows */}
             <div className="space-y-2">
               <span className="text-xs font-medium text-muted-foreground">
-                Time Shift Ranges:
+                {t("doctor.time_shift_ranges")}:
               </span>
               {currentRanges.map((range, rangeIndex) => {
                 const duration = formatDuration(
@@ -516,11 +565,19 @@ export default function SlotEditor({
 
       <Button
         type="button"
-        variant="outline"
         size="sm"
-        onClick={() => append(emptySlot())}
+        className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-xs flex items-center gap-1.5"
+        onClick={() => {
+          const allUsedDays = (getValues("slots") || []).flatMap(
+            (s) => s.days || [],
+          );
+          const availableDay = DAY_NAMES.find((d) => !allUsedDays.includes(d));
+          const newSlot = emptySlot();
+          newSlot.days = availableDay ? [availableDay] : [];
+          append(newSlot);
+        }}
       >
-        <Plus className="mr-1 size-4" aria-hidden /> Add Slot Group
+        <Plus className="mr-1 size-4" aria-hidden /> {t("doctor.add_more_days")}
       </Button>
     </fieldset>
   );

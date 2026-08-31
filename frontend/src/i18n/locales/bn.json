@@ -1,0 +1,90 @@
+{
+  "nav": {
+    "hospitals": "হাসপাতাল",
+    "doctors": "ডাক্তার",
+    "surveys": "জরিপ",
+    "account": "একাউন্ট",
+    "admin": "এডমিন"
+  },
+  "header": {
+    "doctor_form": "ডাক্তার ফরম",
+    "new_hospital": "নতুন হাসপাতাল",
+    "filed": "টি জমা",
+    "filed_plural": "টি জমা"
+  },
+  "hospital": {
+    "title": "নতুন হাসপাতাল",
+    "hospital_name": "হাসপাতালের নাম",
+    "emergency_service": "জরুরী চিকিৎসা সেবা (২৪ ঘন্টা)",
+    "emergency_yes": "হ্যাঁ (২৪/৭ জরুরী)",
+    "emergency_no": "না (সাধারণ সময়)",
+    "location_details": "অবস্থানের তথ্য",
+    "locate_me": "আমার অবস্থান খুঁজুন",
+    "locating_gps": "জিপিএস অবস্থান খোঁজা হচ্ছে…",
+    "update_gps": "জিপিএস অবস্থান আপডেট করুন",
+    "gps_coords": "জিপিএস স্থানাঙ্ক",
+    "gps_denied": "জিপিএস অন করার অনুমতি নেই। নিচে শহর ও জেলা লিখুন।",
+    "city_placeholder": "City (e.g. Savar)",
+    "district_placeholder": "District (e.g. Dhaka)",
+    "common_booking_number": "সাধারণ বুকিং নম্বর (ঐচ্ছিক)",
+    "add_common_number": "নম্বর যোগ করুন",
+    "start_adding_doctors": "ডাক্তার যোগ করা শুরু করুন"
+  },
+  "doctor": {
+    "nameplate_photo": "নামফলকের ছবি",
+    "nameplate_hint": "স্বয়ংক্রিয় পূরণের জন্য নামফলকের ছবি আপলোড করুন",
+    "ocr_reading": "নামফলক স্ক্যান হচ্ছে…",
+    "ocr_autofilled": "ওসিআর থেকে স্বয়ংক্রিয় পূরণ",
+    "ocr_unreadable": "নামফলক পড়া যায়নি",
+    "ocr_idle": "ছবি থেকে নাম ও ডিগ্রি স্বয়ংক্রিয় পূরণ হবে",
+    "doctor_details": "ডাক্তারের তথ্য",
+    "doctor_name": "ডাক্তারের নাম",
+    "doctor_name_placeholder": "e.g. Prof. Dr. MD. Rahim Uddin",
+    "degrees": "ডিগ্রি",
+    "degrees_placeholder": "e.g. MBBS, FCPS (Medicine)",
+    "specializations": "বিশেষজ্ঞতা",
+    "specializations_placeholder": "e.g. Cardiologist, Neurologist",
+    "phone_numbers": "ফোন নম্বর",
+    "add_phone_number": "ফোন নম্বর যোগ করুন",
+    "phone_placeholder": "e.g. 01712345678",
+    "daily_patients": "দৈনিক রোগী",
+    "daily_patients_unit": "জন/দিন",
+    "visit_fee": "ভিজিট ফি",
+    "fee_unit": "৳",
+    "avg_duration": "গড় ভিজিট সময়",
+    "duration_unit": "মিনিট",
+    "availability_schedule": "চেম্বারের সময়সূচী",
+    "group": "গ্রুপ",
+    "select_days": "দিন নির্বাচন করুন",
+    "weekend": "ছুটির দিন",
+    "weekdays": "কর্মদিবস",
+    "all_days": "সব দিন",
+    "clear": "মুছুন",
+    "selected_elsewhere": "অন্য গ্রুপে নির্বাচিত",
+    "add_shift_range": "শিফট",
+    "add_more_days": "আরও দিন যোগ করুন",
+    "time_shift_ranges": "সময়সূচির তালিকা",
+    "shift": "শিফট",
+    "file_doctor": "ডাক্তার সংরক্ষণ করুন এবং পরবর্তী ডাক্তার যোগ করুন",
+    "filing": "সংরক্ষণ হচ্ছে…",
+    "filed_success": "ডাক্তার সংরক্ষিত হয়েছে। পরবর্তী ডাক্তার?"
+  },
+  "surveys": {
+    "title": "সংরক্ষিত জরিপ",
+    "search_placeholder": "ডাক্তার, হাসপাতাল বা জেলা খুঁজুন…",
+    "no_surveys": "এখনো কোনো জরিপ জমা দেওয়া হয়নি।"
+  },
+  "account": {
+    "title": "এজেন্ট একাউন্ট",
+    "sign_out": "লগ আউট"
+  },
+  "days": {
+    "Sat": "শনি",
+    "Sun": "রবি",
+    "Mon": "সোম",
+    "Tue": "মঙ্গল",
+    "Wed": "বুধ",
+    "Thu": "বৃহঃ",
+    "Fri": "শুক্র"
+  }
+}

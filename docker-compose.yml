@@ -101,8 +101,6 @@ services:
       - "${FRONTEND_PORT:-5173}:5173"
     volumes:
       - ./frontend:/app
-      # Anonymous volume keeps the image's node_modules from being shadowed.
-      - /app/node_modules
     depends_on:
       - backend
 

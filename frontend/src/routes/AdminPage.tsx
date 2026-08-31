@@ -17,6 +17,7 @@ import {
   type Survey,
   type UserPublic,
 } from "@/api";
+import AgentCombobox from "@/components/AgentCombobox";
 import { SetPasswordForm } from "@/components/PasswordForm";
 import {
   AlertDialog,
@@ -61,7 +62,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { describePlace, describeSlot } from "@/lib/formatters";
+import { describePlace } from "@/lib/formatters";
 import { createUserSchema, type CreateUserForm } from "@/schemas/user";
 
 export default function AdminPage() {
@@ -209,33 +210,6 @@ export default function AdminPage() {
         </div>
       )}
 
-      {stats && stats.per_agent.length > 0 && (
-        <section className="space-y-2">
-          <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Filter by agent
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant={agentId === "" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setAgentId("")}
-            >
-              All agents ({stats.total})
-            </Button>
-            {stats.per_agent.map((a) => (
-              <Button
-                key={a.user_id}
-                variant={agentId === a.user_id ? "default" : "outline"}
-                size="sm"
-                onClick={() => setAgentId(a.user_id)}
-              >
-                {a.name} ({a.today} today / {a.total} total)
-              </Button>
-            ))}
-          </div>
-        </section>
-      )}
-
       <section className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <Input
@@ -244,6 +218,14 @@ export default function AdminPage() {
             onChange={(e) => setDistrict(e.target.value)}
             className="w-full sm:w-64"
           />
+          {stats && stats.per_agent.length > 0 && (
+            <AgentCombobox
+              agents={stats.per_agent}
+              value={agentId}
+              onChange={setAgentId}
+              totalSurveys={stats.total}
+            />
+          )}
           {filtered && (
             <Button
               variant="ghost"
@@ -301,15 +283,21 @@ export default function AdminPage() {
                     <TableRow key={s.id}>
                       <TableCell>
                         <button
-                          className="text-left underline-offset-4 hover:underline"
+                          className="text-left font-medium underline-offset-4 hover:underline block"
                           onClick={() => openDoctorEditor(s)}
                         >
                           {s.doctor_name ? (
                             ocrLabel(s)
                           ) : (
-                            <span className="text-muted-foreground">{ocrLabel(s)}</span>
+                            <span className="text-muted-foreground italic">{ocrLabel(s)}</span>
                           )}
                         </button>
+                        {s.doctor_degrees && (
+                          <div className="text-xs text-muted-foreground">{s.doctor_degrees}</div>
+                        )}
+                        {s.doctor_specializations && (
+                          <div className="text-xs text-muted-foreground font-medium">{s.doctor_specializations}</div>
+                        )}
                         {s.ocr_status === "failed" && s.ocr_error && (
                           <p className="mt-1 text-xs text-destructive">{s.ocr_error}</p>
                         )}
@@ -368,14 +356,16 @@ export default function AdminPage() {
               {surveys.map((s) => (
                 <li key={s.id}>
                   <Card>
-                    <CardContent className="space-y-1 p-4 text-sm">
+                    <CardContent className="space-y-2 p-4 text-sm">
                       <div className="flex items-start justify-between gap-2">
-                        <button
-                          className="text-left font-medium underline-offset-4 hover:underline"
-                          onClick={() => openDoctorEditor(s)}
-                        >
-                          {ocrLabel(s)}
-                        </button>
+                        <div className="space-y-0.5">
+                          <div className="font-semibold text-base">{s.hospital_name}</div>
+                          {s.has_emergency_service && (
+                            <span className="inline-block rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700 dark:bg-red-950 dark:text-red-300">
+                              🚨 Emergency Service
+                            </span>
+                          )}
+                        </div>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -384,16 +374,33 @@ export default function AdminPage() {
                           Delete
                         </Button>
                       </div>
-                      <div>{s.hospital_name}</div>
-                      <div className="text-muted-foreground">
-                        {describePlace(s)}
+
+                      <div className="rounded-md bg-muted/40 p-2.5 space-y-0.5 border">
+                        <button
+                          className="text-left font-medium text-foreground underline-offset-4 hover:underline block w-full"
+                          onClick={() => openDoctorEditor(s)}
+                        >
+                          {ocrLabel(s)}
+                        </button>
+                        {s.doctor_degrees && (
+                          <div className="text-xs text-muted-foreground">{s.doctor_degrees}</div>
+                        )}
+                        {s.doctor_specializations && (
+                          <div className="text-xs text-muted-foreground font-medium">{s.doctor_specializations}</div>
+                        )}
+                        {s.ocr_status === "failed" && s.ocr_error && (
+                          <p className="mt-1 text-xs text-destructive">{s.ocr_error}</p>
+                        )}
                       </div>
-                      <div className="text-muted-foreground">
-                        {s.slots.map(describeSlot).join(" · ")}
-                      </div>
-                      <div className="text-muted-foreground">
-                        {s.phones.join(" · ")}
-                      </div>
+
+                      {describePlace(s) && (
+                        <div className="text-muted-foreground">{describePlace(s)}</div>
+                      )}
+                      {s.phones.length > 0 && (
+                        <div className="text-muted-foreground">
+                          {s.phones.join(" · ")}
+                        </div>
+                      )}
                       <div className="text-muted-foreground">
                         {s.daily_patients}/day · {s.avg_duration_min} min · ৳
                         {s.consultation_fee_bdt}

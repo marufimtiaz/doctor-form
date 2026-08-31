@@ -103,17 +103,18 @@ async def overall_stats(session: SessionDep, _: AdminUser) -> AdminStatsRead:
         select(
             ChamberSurvey.user_id,
             User.name,
+            User.company,
             func.count().label("total"),
             func.sum(case((today_window, 1), else_=0)).label("today"),
         )
         .join(User, User.id == ChamberSurvey.user_id)
         .where(alive)
-        .group_by(ChamberSurvey.user_id, User.name)
+        .group_by(ChamberSurvey.user_id, User.name, User.company)
         .order_by(func.count().desc())
     )
     per_agent = [
-        AgentStat(user_id=uid, name=name, total=t, today=int(td or 0))
-        for uid, name, t, td in rows.all()
+        AgentStat(user_id=uid, name=name, company=company, total=t, today=int(td or 0))
+        for uid, name, company, t, td in rows.all()
     ]
 
     agents = (

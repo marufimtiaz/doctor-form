@@ -95,8 +95,8 @@ export default function PhoneEditor<T extends FieldValues>({
       )}
       <Button
         type="button"
-        variant="outline"
         size="sm"
+        className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-xs"
         onClick={() => append({ value: "" } as never)}
       >
         <Plus className="size-4" aria-hidden /> {addLabel}

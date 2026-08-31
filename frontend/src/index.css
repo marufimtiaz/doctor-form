@@ -16,24 +16,23 @@
   --popover: #ffffff;
   --popover-foreground: #0f172a;
 
-  /* Teal, not the stock blue: clinical without being sterile, and it holds
-     up on a dim phone screen in a hospital corridor. */
-  --primary: #0f766e;
-  --primary-foreground: #f0fdfa;
+  /* Medical Emerald Green: fresh, clean clinical theme */
+  --primary: #059669;
+  --primary-foreground: #ffffff;
 
   --secondary: #f1f5f9;
   --secondary-foreground: #0f172a;
   --muted: #f1f5f9;
   --muted-foreground: #64748b;
-  --accent: #ccfbf1;
-  --accent-foreground: #134e4a;
+  --accent: #d1fae5;
+  --accent-foreground: #064e3b;
 
   --destructive: #b91c1c;
   --destructive-foreground: #fef2f2;
 
   --border: #e2e8f0;
   --input: #e2e8f0;
-  --ring: #0f766e;
+  --ring: #059669;
 }
 
 .dark {
@@ -44,22 +43,22 @@
   --popover: #111827;
   --popover-foreground: #e2e8f0;
 
-  --primary: #2dd4bf;
-  --primary-foreground: #042f2e;
+  --primary: #059669;
+  --primary-foreground: #ffffff;
 
   --secondary: #1e293b;
   --secondary-foreground: #e2e8f0;
   --muted: #1e293b;
   --muted-foreground: #94a3b8;
-  --accent: #134e4a;
-  --accent-foreground: #ccfbf1;
+  --accent: #064e3b;
+  --accent-foreground: #d1fae5;
 
   --destructive: #f87171;
   --destructive-foreground: #450a0a;
 
   --border: #1e293b;
   --input: #1e293b;
-  --ring: #2dd4bf;
+  --ring: #10b981;
 }
 
 @theme inline {
