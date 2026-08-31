@@ -13,12 +13,12 @@ void i18n
       en: { translation: en },
       bn: { translation: bn },
     },
-    fallbackLng: "en",
+    fallbackLng: "bn",
     interpolation: {
       escapeValue: false,
     },
     detection: {
-      order: ["localStorage", "navigator"],
+      order: ["localStorage"],
       caches: ["localStorage"],
     },
   });
