@@ -1,4 +1,3 @@
-import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useScrollDistractFree } from "./useScrollDistractFree";
 
@@ -21,12 +20,6 @@ describe("useScrollDistractFree", () => {
     };
   });
 
-  const triggerScroll = (y: number) => {
-    (global as any).window.scrollY = y;
-    act(() => {
-      listeners["scroll"]?.forEach((fn) => fn());
-    });
-  };
 
   it("defaults to false (visible) at top of page", () => {
     let current = false;

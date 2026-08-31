@@ -23,7 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useHospital } from "@/hospital";
-import { useAutoDistractFree } from "@/hooks/useAutoDistractFree";
+import { useScrollDistractFree } from "@/hooks/useScrollDistractFree";
 import {
   base64ToFile,
   clearDoctorDraft,
@@ -43,7 +43,7 @@ import {
 export default function DoctorPage() {
   const { t } = useTranslation();
   const { hospital, recordDoctor } = useHospital();
-  const navHidden = useAutoDistractFree();
+  const navHidden = useScrollDistractFree();
 
   const [nameplate, setNameplate] = useState<File | null>(null);
   const [nameplateError, setNameplateError] = useState<string | null>(null);

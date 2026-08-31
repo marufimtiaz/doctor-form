@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
 import { useHospital } from "@/hospital";
-import { useAutoDistractFree } from "@/hooks/useAutoDistractFree";
+import { useScrollDistractFree } from "@/hooks/useScrollDistractFree";
 import { clearDoctorDraft } from "@/lib/doctorDraft";
 import { cn } from "@/lib/utils";
 import AccountPage from "@/routes/AccountPage";
@@ -112,7 +112,7 @@ function Header({ hidden }: { hidden: boolean }) {
 
 export default function App() {
   const { user, loading } = useAuth();
-  const hidden = useAutoDistractFree();
+  const hidden = useScrollDistractFree();
 
   if (loading) {
     return (
